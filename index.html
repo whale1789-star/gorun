@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>體感賽跑 100M - WebRTC 雙端互動</title>
+  <!-- 載入 PeerJS (點對點連線)、QRCode 與 Confetti 特效套件 -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes leg-swing-left {
+      0%, 100% { transform: rotate(30deg); }
+      50% { transform: rotate(-30deg); }
+    }
+    @keyframes leg-swing-right {
+      0%, 100% { transform: rotate(-30deg); }
+      50% { transform: rotate(30deg); }
+    }
+    .anim-leg-left { transform-origin: 30px 42px; animation: leg-swing-left 0.4s infinite ease-in-out; }
+    .anim-leg-right { transform-origin: 30px 42px; animation: leg-swing-right 0.4s infinite ease-in-out; }
+    .paused { animation-play-state: paused !important; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+
+  <!-- ==================== 電腦大螢幕端 (Host View) ==================== -->
+  <div id="host-view" class="hidden flex-1 flex-col p-4 md:p-8 max-w-6xl mx-auto w-full">
+    <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕顯示端 · WebRTC P2P 直連</p>
+      </div>
+      <div id="connection-badge" class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-semibold">
+        等待手機連線...
+      </div>
+    </header>
+
+    <!-- 尚未連線：顯示配對 QR Code -->
+    <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
+      <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後將化身為體感加速手把，不需安裝任何 App！</p>
+      <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
+      <div class="mt-4 text-xs text-slate-400">
+        房間代碼：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
+      </div>
+    </div>
+
+    <!-- 已連線：比賽跑道區域 -->
+    <div id="game-panel" class="hidden flex-1 flex-col justify-center gap-6">
+      <!-- 狀態列 -->
+      <div class="grid grid-cols-3 gap-4 text-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
+        <div>
+          <div class="text-xs text-slate-400">競賽時間</div>
+          <div id="timer-text" class="text-2xl font-mono font-bold text-white">00.00s</div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">玩家時速</div>
+          <div id="speed-text" class="text-2xl font-mono font-bold text-amber-400">0.0 <span class="text-sm font-normal text-slate-400">km/h</span></div>
+        </div>
+        <div>
+          <div class="text-xs text-slate-400">賽事狀態</div>
+          <div id="race-status" class="text-2xl font-bold text-emerald-400">準備起跑</div>
+        </div>
+      </div>
+
+      <!-- 田徑跑道 -->
+      <div class="relative bg-orange-800/90 rounded-2xl p-6 border-4 border-orange-950 shadow-inner overflow-hidden flex flex-col gap-6">
+        <!-- 跑道標線背景 -->
+        <div class="absolute inset-0 flex justify-between px-10 pointer-events-none opacity-20">
+          <div class="border-r-2 border-dashed border-white h-full"></div>
+          <div class="border-r-2 border-dashed border-white h-full"></div>
+          <div class="border-r-2 border-dashed border-white h-full"></div>
+          <div class="border-r-2 border-dashed border-white h-full"></div>
+        </div>
+
+        <!-- 跑道 1：玩家 -->
+        <div class="relative bg-orange-700/60 rounded-xl h-24 flex items-center px-4 border border-orange-600/40">
+          <div class="absolute left-3 top-2 text-[10px] font-bold text-orange-200">1P 體感玩家</div>
+          <div id="player-runner" class="absolute left-4 transition-all duration-75 flex flex-col items-center">
+            <svg class="w-12 h-12 text-amber-400" viewBox="0 0 60 60" fill="currentColor">
+              <circle cx="30" cy="12" r="7" />
+              <rect x="25" y="20" width="10" height="22" rx="3" />
+              <!-- 雙腿動畫 -->
+              <rect id="p-leg-l" class="anim-leg-left paused" x="24" y="38" width="5" height="18" rx="2" fill="#f59e0b" />
+              <rect id="p-leg-r" class="anim-leg-right paused" x="31" y="38" width="5" height="18" rx="2" fill="#d97706" />
+            </svg>
+          </div>
+          <!-- 終點線 -->
+          <div class="absolute right-6 top-0 bottom-0 w-2 bg-white flex flex-col justify-around">
+            <div class="h-2 bg-red-600"></div>
+            <div class="h-2 bg-red-600"></div>
+          </div>
+        </div>
+
+        <!-- 跑道 2：AI 對手 -->
+        <div class="relative bg-orange-700/60 rounded-xl h-24 flex items-center px-4 border border-orange-600/40">
+          <div class="absolute left-3 top-2 text-[10px] font-bold text-orange-200">2P 電腦選手 (AI)</div>
+          <div id="ai-runner" class="absolute left-4 transition-all duration-75 flex flex-col items-center">
+            <svg class="w-12 h-12 text-cyan-400" viewBox="0 0 60 60" fill="currentColor">
+              <circle cx="30" cy="12" r="7" />
+              <rect x="25" y="20" width="10" height="22" rx="3" />
+              <rect id="ai-leg-l" class="anim-leg-left paused" x="24" y="38" width="5" height="18" rx="2" fill="#06b6d4" />
+              <rect id="ai-leg-r" class="anim-leg-right paused" x="31" y="38" width="5" height="18" rx="2" fill="#0891b2" />
+            </svg>
+          </div>
+          <div class="absolute right-6 top-0 bottom-0 w-2 bg-white flex flex-col justify-around">
+            <div class="h-2 bg-red-600"></div>
+            <div class="h-2 bg-red-600"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 控制按鈕 -->
+      <div class="flex justify-center gap-4">
+        <button id="btn-start" class="px-8 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-xl text-lg shadow-lg active:scale-95 transition">
+          起跑鳴槍
+        </button>
+        <button id="btn-reset" class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl text-lg active:scale-95 transition">
+          重置比賽
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 手機體感手把端 (Controller View) ==================== -->
+  <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-6 max-w-md mx-auto w-full text-center">
+    <div>
+      <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
+      <h1 class="text-2xl font-black text-amber-400">狂搖手機加速！</h1>
+      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs">
+        已連接至主螢幕
+      </div>
+    </div>
+
+    <!-- iOS 授權引導按鈕 (預設隱藏，iOS 觸發時展示) -->
+    <div id="ios-permission-box" class="hidden my-auto w-full p-6 bg-slate-800 border border-amber-500/40 rounded-2xl">
+      <p class="text-sm mb-4 text-slate-200">iOS Safari 需要點擊下方按鈕以啟用「動作與方向感測」功能：</p>
+      <button id="btn-ios-auth" class="w-full py-4 bg-amber-500 text-slate-900 font-bold text-lg rounded-xl shadow-lg">
+        授權體感感測器
+      </button>
+    </div>
+
+    <!-- 體感動力儀表 -->
+    <div id="motion-box" class="my-auto flex flex-col items-center justify-center">
+      <div class="relative w-44 h-44 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
+        <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
+        <div class="relative z-10">
+          <div class="text-3xl font-black text-amber-400" id="motion-val">0</div>
+          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">G-Force</div>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-6 max-w-[200px]">握緊手機上下或前後連續大力揮動！</p>
+    </div>
+
+    <!-- 備用觸控加速鈕 -->
+    <button id="btn-touch-boost" class="w-full py-5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
+      🔥 點擊衝刺 (備用)
+    </button>
+  </div>
+
+  <!-- ==================== 前端邏輯核心腳本 ==================== -->
+  <script>
+    // 檢查 URL 參數中是否包含 room 參數判斷身分
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomParam = urlParams.get('room');
+
+    // 核心狀態變數
+    let peer = null;
+    let conn = null;
+    let playerDist = 0;
+    let aiDist = 0;
+    let playerSpeed = 0;
+    let aiSpeed = 0;
+    let isRunning = false;
+    let startTime = 0;
+    let gameLoopId = null;
+
+    // 音效引擎 (Web Audio API)
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(freq, type = 'sine', duration = 0.15) {
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+
+    // ============================================================
+    // 角色 A：手機手把端 (Controller)
+    // ============================================================
+    if (roomParam) {
+      document.getElementById('controller-view').classList.remove('hidden');
+      document.getElementById('controller-view').classList.add('flex');
+
+      peer = new Peer();
+      peer.on('open', (id) => {
+        conn = peer.connect(roomParam);
+        conn.on('open', () => {
+          document.getElementById('mobile-conn-status').innerText = '已成功連線至跑道';
+          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        });
+      });
+
+      let lastAcc = { x: 0, y: 0, z: 0 };
+      let lastSendTime = 0;
+
+      function handleMotion(e) {
+        const acc = e.accelerationIncludingGravity || e.acceleration;
+        if (!acc) return;
+
+        // 計算三軸加速度變化量
+        const deltaX = Math.abs(acc.x - lastAcc.x);
+        const deltaY = Math.abs(acc.y - lastAcc.y);
+        const deltaZ = Math.abs(acc.z - lastAcc.z);
+        const movement = deltaX + deltaY + deltaZ;
+
+        lastAcc = { x: acc.x, y: acc.y, z: acc.z };
+
+        // 視覺回饋
+        const displayVal = Math.min(Math.round(movement * 2), 99);
+        document.getElementById('motion-val').innerText = displayVal;
+        const scaleVal = Math.min(0.5 + movement / 30, 1.0);
+        document.getElementById('motion-fill').style.transform = `scale(${scaleVal})`;
+
+        // 搖晃門檻值過濾 (大於 18 判定為有效擺手動作)
+        const now = Date.now();
+        if (movement > 18 && now - lastSendTime > 70) {
+          lastSendTime = now;
+          if (conn && conn.open) {
+            conn.send({ type: 'SHAKE', power: movement });
+          }
+          if (navigator.vibrate) navigator.vibrate(30);
+        }
+      }
+
+      // iOS 13+ 權限請求處理
+      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+        const iosBox = document.getElementById('ios-permission-box');
+        const motionBox = document.getElementById('motion-box');
+        iosBox.classList.remove('hidden');
+        motionBox.classList.add('hidden');
+
+        document.getElementById('btn-ios-auth').addEventListener('click', () => {
+          DeviceMotionEvent.requestPermission().then(response => {
+            if (response === 'granted') {
+              window.addEventListener('devicemotion', handleMotion);
+              iosBox.classList.add('hidden');
+              motionBox.classList.remove('hidden');
+            } else {
+              alert('未取得感測器授權，無法啟用搖晃加速功能');
+            }
+          }).catch(console.error);
+        });
+      } else {
+        window.addEventListener('devicemotion', handleMotion);
+      }
+
+      // 備用觸控按鈕
+      document.getElementById('btn-touch-boost').addEventListener('click', () => {
+        if (conn && conn.open) {
+          conn.send({ type: 'SHAKE', power: 25 });
+        }
+        if (navigator.vibrate) navigator.vibrate(40);
+      });
+
+    // ============================================================
+    // 角色 B：電腦大螢幕跑道 (Host)
+    // ============================================================
+    } else {
+      document.getElementById('host-view').classList.remove('hidden');
+      document.getElementById('host-view').classList.add('flex');
+
+      // 產生 5 碼隨機房間代碼
+      const roomId = 'sprint-' + Math.random().toString(36).substring(2, 7);
+      document.getElementById('room-code-display').innerText = roomId;
+
+      peer = new Peer(roomId);
+      peer.on('open', (id) => {
+        // 產生手機掃瞄網址
+        const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
+        new QRCode(document.getElementById('qrcode'), {
+          text: joinUrl,
+          width: 180,
+          height: 180,
+          colorDark: "#0f172a",
+          colorLight: "#ffffff"
+        });
+      });
+
+      peer.on('connection', (connection) => {
+        conn = connection;
+        document.getElementById('connection-badge').innerText = '手機控制器已就緒';
+        document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
+        document.getElementById('qr-panel').classList.add('hidden');
+        document.getElementById('game-panel').classList.remove('hidden');
+        document.getElementById('game-panel').classList.add('flex');
+
+        conn.on('data', (data) => {
+          if (data.type === 'SHAKE' && isRunning) {
+            // 根據搖動力度賦予玩家推進力
+            playerSpeed += Math.min(data.power * 0.15, 3.5);
+            playBeep(260 + playerSpeed * 10, 'triangle', 0.08);
+          }
+        });
+      });
+
+      // 起跑按鈕
+      document.getElementById('btn-start').addEventListener('click', () => {
+        if (isRunning) return;
+        resetRace();
+        startCountdown();
+      });
+
+      // 重置按鈕
+      document.getElementById('btn-reset').addEventListener('click', resetRace);
+
+      function startCountdown() {
+        let count = 3;
+        const statusEl = document.getElementById('race-status');
+        statusEl.innerText = count;
+        playBeep(440);
+
+        const timer = setInterval(() => {
+          count--;
+          if (count > 0) {
+            statusEl.innerText = count;
+            playBeep(440);
+          } else {
+            clearInterval(timer);
+            statusEl.innerText = '衝刺中！';
+            playBeep(880, 'square', 0.3); // 鳴槍聲
+            isRunning = true;
+            startTime = Date.now();
+            document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.remove('paused'));
+            gameLoopId = requestAnimationFrame(gameLoop);
+          }
+        }, 1000);
+      }
+
+      function gameLoop() {
+        if (!isRunning) return;
+
+        // 計算經過時間
+        const elapsed = (Date.now() - startTime) / 1000;
+        document.getElementById('timer-text').innerText = elapsed.toFixed(2) + 's';
+
+        // 物理阻力減速
+        playerSpeed *= 0.94;
+        if (playerSpeed < 0.05) playerSpeed = 0;
+
+        // AI 對手行為模擬 (基礎巡航速度 + 微小波動)
+        aiSpeed = 1.2 + Math.sin(Date.now() / 200) * 0.4;
+
+        // 更新跑道位移
+        playerDist += playerSpeed * 0.25;
+        aiDist += aiSpeed * 0.25;
+
+        // 更新即時時速 (km/h)
+        const kmh = (playerSpeed * 8.5).toFixed(1);
+        document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
+
+        // 跑道邊界換算 (最大百分比 88%)
+        const maxPercent = 88;
+        const playerPercent = Math.min((playerDist / 100) * maxPercent, maxPercent);
+        const aiPercent = Math.min((aiDist / 100) * maxPercent, maxPercent);
+
+        document.getElementById('player-runner').style.left = `${playerPercent}%`;
+        document.getElementById('ai-runner').style.left = `${aiPercent}%`;
+
+        // 判定衝線勝負 (先抵達 100m 者勝)
+        if (playerDist >= 100 || aiDist >= 100) {
+          isRunning = false;
+          document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
+          
+          const statusEl = document.getElementById('race-status');
+          if (playerDist >= 100) {
+            statusEl.innerText = '🏆 1P 獲勝！';
+            confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 } });
+          } else {
+            statusEl.innerText = 'AI 選手獲勝！';
+          }
+          return;
+        }
+
+        gameLoopId = requestAnimationFrame(gameLoop);
+      }
+
+      function resetRace() {
+        isRunning = false;
+        cancelAnimationFrame(gameLoopId);
+        playerDist = 0;
+        aiDist = 0;
+        playerSpeed = 0;
+        aiSpeed = 0;
+        document.getElementById('player-runner').style.left = '16px';
+        document.getElementById('ai-runner').style.left = '16px';
+        document.getElementById('timer-text').innerText = '00.00s';
+        document.getElementById('speed-text').innerHTML = `0.0 <span class="text-sm font-normal text-slate-400">km/h</span>`;
+        document.getElementById('race-status').innerText = '準備起跑';
+        document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
+      }
+    }
+  </script>
+</body>
+</html>
