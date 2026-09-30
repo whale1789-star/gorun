@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>112233體感賽跑 100M - 連線保證直通版</title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <title>體感賽跑 100M - 雲端即時直通版</title>
+  <!-- 載入 MQTT 即時通訊庫、QRCode 與 Confetti 特效 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,14 +30,14 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 即時狀態監控</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 雲端即時中繼保證通</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
           訊號接收: 0
         </span>
         <div id="connection-badge" class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-semibold">
-          等待配對...
+          連線伺服器中...
         </div>
       </div>
     </header>
@@ -44,14 +45,14 @@
     <!-- 尚未連線：配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">掃描後手機將變成無線體感控制器</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">跨任何 4G/5G/Wi-Fi 皆可秒連！</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
         房間代碼：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
       </div>
     </div>
 
-    <!-- 已連線：比賽跑道區域 -->
+    <!-- 比賽跑道區域 -->
     <div id="game-panel" class="hidden flex-1 flex-col justify-center gap-6">
       <div class="grid grid-cols-3 gap-4 text-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
         <div>
@@ -129,7 +130,7 @@
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
       <h1 class="text-2xl font-black text-amber-400">狂搖手機加速！</h1>
       <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
-        正在連線至伺服器...
+        連線中...
       </div>
     </div>
 
@@ -141,7 +142,7 @@
       </button>
     </div>
 
-    <!-- 體感動力儀表與除錯讀數 -->
+    <!-- 體感動力儀表與讀數 -->
     <div id="motion-box" class="my-auto flex flex-col items-center justify-center">
       <div class="relative w-44 h-44 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
         <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
@@ -160,13 +161,16 @@
     </button>
   </div>
 
-  <!-- ==================== 前端邏輯核心腳本 ==================== -->
+  <!-- ==================== 前端邏輯核心腳本 (MQTT 雲端直通引擎) ==================== -->
   <script>
+    // 使用全球公開的 EMQX 免費高可用 WebSocket 伺服器 (支援 WSS 加密)
+    const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
+
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
 
-    let peer = null;
-    let conn = null;
+    let client = null;
+    let topicName = '';
     let playerDist = 0;
     let aiDist = 0;
     let playerSpeed = 0;
@@ -202,39 +206,29 @@
       document.getElementById('controller-view').classList.remove('hidden');
       document.getElementById('controller-view').classList.add('flex');
 
+      topicName = `sprint-race/${roomParam}`;
       const statusEl = document.getElementById('mobile-conn-status');
 
-      // 初始化 Peer
-      peer = new Peer();
+      // 連接 MQTT 伺服器
+      client = mqtt.connect(MQTT_BROKER);
 
-      peer.on('open', (id) => {
-        statusEl.innerText = '正在配對大螢幕...';
-        conn = peer.connect(roomParam, { reliable: true });
-
-        conn.on('open', () => {
-          statusEl.innerText = '✅ 連線成功！可開始搖晃';
-          statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
-          if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        });
-
-        conn.on('error', (err) => {
-          statusEl.innerText = '連線錯誤：' + err;
-        });
+      client.on('connect', () => {
+        statusEl.innerText = '✅ 連線成功！可開始搖晃';
+        statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
+        if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        // 向大螢幕發送握手確認
+        client.publish(topicName, JSON.stringify({ type: 'JOIN' }));
       });
 
-      peer.on('error', (err) => {
-        statusEl.innerText = '伺服器連線異常，請重整網頁';
+      client.on('error', (err) => {
+        statusEl.innerText = '連線異常，正在重新連線...';
       });
 
-      // 核心發送函式（不設死 conn.open，若未連線跳出提示）
       function sendSpeedBoost(power) {
-        totalPacketsSent++;
-        document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
-
-        if (conn && conn.open) {
-          conn.send({ type: 'SHAKE', power: Number(power) || 15 });
-        } else {
-          statusEl.innerText = '⚠️ 通道建立中，請稍候再按...';
+        if (client && client.connected) {
+          totalPacketsSent++;
+          document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
+          client.publish(topicName, JSON.stringify({ type: 'SHAKE', power: Number(power) || 15 }));
         }
       }
 
@@ -264,7 +258,6 @@
         document.getElementById('motion-fill').style.transform = `scale(${scaleVal})`;
 
         const now = Date.now();
-        // 降低門檻，保證搖動必觸發
         if (movement > 3.5 && now - lastSendTime > 40) {
           lastSendTime = now;
           sendSpeedBoost(movement);
@@ -272,7 +265,7 @@
         }
       }
 
-      // 註冊體感事件
+      // iOS 授權機制
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         document.getElementById('btn-ios-auth').addEventListener('click', () => {
           DeviceMotionEvent.requestPermission().then(res => {
@@ -286,13 +279,12 @@
           }).catch(console.error);
         });
       } else {
-        // Android / 一般瀏覽器直接掛載
         window.addEventListener('devicemotion', handleMotion);
         document.getElementById('ios-permission-box').classList.add('hidden');
         document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 測試點擊按鈕：不管有沒有搖晃，點了就送
+      // 測試點擊按鈕
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -305,36 +297,44 @@
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-view').classList.add('flex');
 
-      const roomId = 'sprint-' + Math.random().toString(36).substring(2, 7);
+      // 隨機產生 5 碼房間號
+      const roomId = Math.random().toString(36).substring(2, 7);
       document.getElementById('room-code-display').innerText = roomId;
+      topicName = `sprint-race/${roomId}`;
 
-      peer = new Peer(roomId);
-      peer.on('open', (id) => {
-        const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
-        new QRCode(document.getElementById('qrcode'), {
-          text: joinUrl,
-          width: 180,
-          height: 180,
-          colorDark: "#0f172a",
-          colorLight: "#ffffff"
-        });
+      // 產生 QR Code
+      const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+      new QRCode(document.getElementById('qrcode'), {
+        text: joinUrl,
+        width: 180,
+        height: 180,
+        colorDark: "#0f172a",
+        colorLight: "#ffffff"
       });
 
-      peer.on('connection', (connection) => {
-        conn = connection;
-        
-        conn.on('open', () => {
-          document.getElementById('connection-badge').innerText = '✅ 手機已就緒';
-          document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
-          document.getElementById('qr-panel').classList.add('hidden');
-          document.getElementById('game-panel').classList.remove('hidden');
-          document.getElementById('game-panel').classList.add('flex');
+      // 連接 MQTT 伺服器並訂閱房間頻道
+      client = mqtt.connect(MQTT_BROKER);
 
-          startIdlePhysics();
-        });
+      client.on('connect', () => {
+        document.getElementById('connection-badge').innerText = '伺服器已就緒，等待手機...';
+        client.subscribe(topicName);
+      });
 
-        conn.on('data', (data) => {
-          if (data && data.type === 'SHAKE') {
+      // 接收手機訊號
+      client.on('message', (topic, message) => {
+        try {
+          const data = JSON.parse(message.toString());
+
+          // 手機加入成功
+          if (data.type === 'JOIN' || data.type === 'SHAKE') {
+            document.getElementById('connection-badge').innerText = '✅ 手機已就緒';
+            document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
+            document.getElementById('qr-panel').classList.add('hidden');
+            document.getElementById('game-panel').classList.remove('hidden');
+            document.getElementById('game-panel').classList.add('flex');
+          }
+
+          if (data.type === 'SHAKE') {
             totalPacketsReceived++;
             document.getElementById('packet-counter').innerText = `訊號接收: ${totalPacketsReceived}`;
             
@@ -344,24 +344,23 @@
             document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.remove('paused'));
             playBeep(260 + Math.min(playerSpeed * 10, 480));
           }
-        });
+        } catch (e) {}
       });
 
+      // 未鳴槍前的熱身監聽迴圈
       function startIdlePhysics() {
-        function idleLoop() {
-          if (!isRunning) {
-            playerSpeed *= 0.94;
-            if (playerSpeed < 0.05) {
-              playerSpeed = 0;
-              document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.add('paused'));
-            }
-            const kmh = (playerSpeed * 8.5).toFixed(1);
-            document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
+        if (!isRunning) {
+          playerSpeed *= 0.94;
+          if (playerSpeed < 0.05) {
+            playerSpeed = 0;
+            document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.add('paused'));
           }
-          requestAnimationFrame(idleLoop);
+          const kmh = (playerSpeed * 8.5).toFixed(1);
+          document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
         }
-        requestAnimationFrame(idleLoop);
+        requestAnimationFrame(startIdlePhysics);
       }
+      requestAnimationFrame(startIdlePhysics);
 
       document.getElementById('btn-start').addEventListener('click', () => {
         if (isRunning) return;
