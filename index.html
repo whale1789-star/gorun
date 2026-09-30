@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>體感賽跑 100M - 雲端即時直通版</title>
-  <!-- 載入 MQTT 即時通訊庫、QRCode 與 Confetti 特效 -->
+  <title>11體感賽跑 100M - 雙向同步直通版</title>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -30,7 +29,7 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 雲端即時中繼保證通</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 雲端即時直通</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
@@ -45,11 +44,16 @@
     <!-- 尚未連線：配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">跨任何 4G/5G/Wi-Fi 皆可秒連！</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後立即進入手把模式，大螢幕將自動切換為跑道！</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
-        房間代碼：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
+        房間頻道：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
       </div>
+      
+      <!-- 備用手動切換按鈕（防止時序偶發阻塞） -->
+      <button id="btn-force-enter" class="mt-6 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg border border-slate-600 transition">
+        手機已連線但未跳轉？點此強制進入跑道 ➔
+      </button>
     </div>
 
     <!-- 比賽跑道區域 -->
@@ -130,7 +134,7 @@
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
       <h1 class="text-2xl font-black text-amber-400">狂搖手機加速！</h1>
       <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
-        連線中...
+        連線伺服器中...
       </div>
     </div>
 
@@ -161,9 +165,9 @@
     </button>
   </div>
 
-  <!-- ==================== 前端邏輯核心腳本 (MQTT 雲端直通引擎) ==================== -->
+  <!-- ==================== 前端邏輯核心腳本 ==================== -->
   <script>
-    // 使用全球公開的 EMQX 免費高可用 WebSocket 伺服器 (支援 WSS 加密)
+    // 使用 EMQX 免費公開 WebSocket MQTT Broker (跨網穿透 100%)
     const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
 
     const urlParams = new URLSearchParams(window.location.search);
@@ -206,21 +210,30 @@
       document.getElementById('controller-view').classList.remove('hidden');
       document.getElementById('controller-view').classList.add('flex');
 
-      topicName = `sprint-race/${roomParam}`;
+      topicName = `sprint-race-v2/${roomParam}`;
       const statusEl = document.getElementById('mobile-conn-status');
 
-      // 連接 MQTT 伺服器
       client = mqtt.connect(MQTT_BROKER);
 
+      let handshakeTimer = null;
+
       client.on('connect', () => {
-        statusEl.innerText = '✅ 連線成功！可開始搖晃';
+        statusEl.innerText = '✅ 連線成功！大螢幕已就緒';
         statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
         if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-        // 向大螢幕發送握手確認
-        client.publish(topicName, JSON.stringify({ type: 'JOIN' }));
+
+        // 【關鍵修復】：每秒補發握手訊號，連續 3 次，防止電腦延遲訂閱而漏接
+        let retryCount = 0;
+        handshakeTimer = setInterval(() => {
+          if (client && client.connected) {
+            client.publish(topicName, JSON.stringify({ type: 'JOIN' }));
+            retryCount++;
+            if (retryCount >= 4) clearInterval(handshakeTimer);
+          }
+        }, 800);
       });
 
-      client.on('error', (err) => {
+      client.on('error', () => {
         statusEl.innerText = '連線異常，正在重新連線...';
       });
 
@@ -284,7 +297,7 @@
         document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 測試點擊按鈕
+      // 備用手動按鈕
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -297,10 +310,10 @@
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-view').classList.add('flex');
 
-      // 隨機產生 5 碼房間號
+      // 產生隨機房間號
       const roomId = Math.random().toString(36).substring(2, 7);
       document.getElementById('room-code-display').innerText = roomId;
-      topicName = `sprint-race/${roomId}`;
+      topicName = `sprint-race-v2/${roomId}`;
 
       // 產生 QR Code
       const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
@@ -312,27 +325,39 @@
         colorLight: "#ffffff"
       });
 
-      // 連接 MQTT 伺服器並訂閱房間頻道
+      // 切換進入跑道介面的核心函式
+      let isGamePanelActive = false;
+      function showGamePanel() {
+        if (isGamePanelActive) return;
+        isGamePanelActive = true;
+        document.getElementById('connection-badge').innerText = '✅ 手機已就緒';
+        document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
+        document.getElementById('qr-panel').classList.add('hidden');
+        document.getElementById('game-panel').classList.remove('hidden');
+        document.getElementById('game-panel').classList.add('flex');
+        startIdlePhysics();
+      }
+
+      // 備用按鈕：手動進入跑道
+      document.getElementById('btn-force-enter').addEventListener('click', showGamePanel);
+
+      // 連接 MQTT 伺服器並訂閱
       client = mqtt.connect(MQTT_BROKER);
 
       client.on('connect', () => {
-        document.getElementById('connection-badge').innerText = '伺服器已就緒，等待手機...';
-        client.subscribe(topicName);
+        document.getElementById('connection-badge').innerText = '等待手機掃碼...';
+        client.subscribe(topicName, (err) => {
+          if (!err) console.log('已成功訂閱房間頻道:', topicName);
+        });
       });
 
-      // 接收手機訊號
+      // 接收手機發送的訊息
       client.on('message', (topic, message) => {
         try {
           const data = JSON.parse(message.toString());
 
-          // 手機加入成功
-          if (data.type === 'JOIN' || data.type === 'SHAKE') {
-            document.getElementById('connection-badge').innerText = '✅ 手機已就緒';
-            document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
-            document.getElementById('qr-panel').classList.add('hidden');
-            document.getElementById('game-panel').classList.remove('hidden');
-            document.getElementById('game-panel').classList.add('flex');
-          }
+          // 收到 JOIN 或 SHAKE 訊號，立刻切換至跑道！
+          showGamePanel();
 
           if (data.type === 'SHAKE') {
             totalPacketsReceived++;
@@ -347,20 +372,21 @@
         } catch (e) {}
       });
 
-      // 未鳴槍前的熱身監聽迴圈
       function startIdlePhysics() {
-        if (!isRunning) {
-          playerSpeed *= 0.94;
-          if (playerSpeed < 0.05) {
-            playerSpeed = 0;
-            document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.add('paused'));
+        function idleLoop() {
+          if (!isRunning) {
+            playerSpeed *= 0.94;
+            if (playerSpeed < 0.05) {
+              playerSpeed = 0;
+              document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.add('paused'));
+            }
+            const kmh = (playerSpeed * 8.5).toFixed(1);
+            document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
           }
-          const kmh = (playerSpeed * 8.5).toFixed(1);
-          document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
+          requestAnimationFrame(idleLoop);
         }
-        requestAnimationFrame(startIdlePhysics);
+        requestAnimationFrame(idleLoop);
       }
-      requestAnimationFrame(startIdlePhysics);
 
       document.getElementById('btn-start').addEventListener('click', () => {
         if (isRunning) return;
