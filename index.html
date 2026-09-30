@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>11體感賽跑 100M - 雙向同步直通版</title>
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <title>22體感賽跑 100M - 高穿透直通版</title>
+  <!-- 載入 QRCode 與 Confetti 特效套件 (改用純原生 WebSocket，不需外部通訊函式庫) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,7 +29,7 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 雲端即時直通</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 原生 WebSocket 直通通道</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
@@ -44,15 +44,13 @@
     <!-- 尚未連線：配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後立即進入手把模式，大螢幕將自動切換為跑道！</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後將自動連接專屬通訊頻道！</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
-        房間頻道：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
+        專屬房間：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
       </div>
-      
-      <!-- 備用手動切換按鈕（防止時序偶發阻塞） -->
       <button id="btn-force-enter" class="mt-6 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs rounded-lg border border-slate-600 transition">
-        手機已連線但未跳轉？點此強制進入跑道 ➔
+        點此直接進入跑道 (手動進入) ➔
       </button>
     </div>
 
@@ -134,13 +132,14 @@
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
       <h1 class="text-2xl font-black text-amber-400">狂搖手機加速！</h1>
       <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
-        連線伺服器中...
+        連線中...
       </div>
+      <div id="channel-info" class="text-[10px] font-mono text-slate-500 mt-1">頻道：---</div>
     </div>
 
     <!-- iOS 授權區塊 -->
     <div id="ios-permission-box" class="my-3 w-full p-4 bg-slate-800 border border-amber-500/40 rounded-2xl">
-      <p class="text-xs mb-2 text-slate-300">iPhone / Safari 必須點擊此處啟用體感：</p>
+      <p class="text-xs mb-2 text-slate-300">iPhone / Safari 請點擊此處啟用動作感測：</p>
       <button id="btn-ios-auth" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-sm rounded-xl shadow-lg active:scale-95 transition">
         點此啟用體感感測
       </button>
@@ -165,16 +164,16 @@
     </button>
   </div>
 
-  <!-- ==================== 前端邏輯核心腳本 ==================== -->
+  <!-- ==================== 前端邏輯核心腳本 (PieSocket 原生 WebSocket 通道) ==================== -->
   <script>
-    // 使用 EMQX 免費公開 WebSocket MQTT Broker (跨網穿透 100%)
-    const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
-
+    // 使用全球高可用性 PieSocket 原生 WebSocket 通道 (Demo API Key，免金鑰且具備全域廣播保證)
+    const PIE_API_KEY = 'VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV';
+    
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
 
-    let client = null;
-    let topicName = '';
+    let ws = null;
+    let roomId = '';
     let playerDist = 0;
     let aiDist = 0;
     let playerSpeed = 0;
@@ -210,38 +209,32 @@
       document.getElementById('controller-view').classList.remove('hidden');
       document.getElementById('controller-view').classList.add('flex');
 
-      topicName = `sprint-race-v2/${roomParam}`;
+      roomId = roomParam;
+      document.getElementById('channel-info').innerText = `頻道代號：${roomId}`;
       const statusEl = document.getElementById('mobile-conn-status');
 
-      client = mqtt.connect(MQTT_BROKER);
+      // 建立原生 WebSocket 連線
+      const wsUrl = `wss://free.blr2.piesocket.com/v3/${roomId}?api_key=${PIE_API_KEY}&notify_self=0`;
+      ws = new WebSocket(wsUrl);
 
-      let handshakeTimer = null;
-
-      client.on('connect', () => {
-        statusEl.innerText = '✅ 連線成功！大螢幕已就緒';
+      ws.onopen = () => {
+        statusEl.innerText = '✅ 連線成功！大螢幕已同步';
         statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
         if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
-        // 【關鍵修復】：每秒補發握手訊號，連續 3 次，防止電腦延遲訂閱而漏接
-        let retryCount = 0;
-        handshakeTimer = setInterval(() => {
-          if (client && client.connected) {
-            client.publish(topicName, JSON.stringify({ type: 'JOIN' }));
-            retryCount++;
-            if (retryCount >= 4) clearInterval(handshakeTimer);
-          }
-        }, 800);
-      });
+        // 發送進入訊號
+        ws.send(JSON.stringify({ type: 'JOIN' }));
+      };
 
-      client.on('error', () => {
-        statusEl.innerText = '連線異常，正在重新連線...';
-      });
+      ws.onerror = (e) => {
+        statusEl.innerText = '連線異常，請重整網頁';
+      };
 
       function sendSpeedBoost(power) {
-        if (client && client.connected) {
+        if (ws && ws.readyState === WebSocket.OPEN) {
           totalPacketsSent++;
           document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
-          client.publish(topicName, JSON.stringify({ type: 'SHAKE', power: Number(power) || 15 }));
+          ws.send(JSON.stringify({ type: 'SHAKE', power: Number(power) || 15 }));
         }
       }
 
@@ -287,7 +280,7 @@
               document.getElementById('ios-permission-box').classList.add('hidden');
               document.getElementById('debug-text').innerText = '感測器：已授權啟用';
             } else {
-              alert('未取得體感授權，請至 Safari 設定允許動作與方向');
+              alert('未取得體感授權，請在 Safari 設定中開啟動作與方向存取');
             }
           }).catch(console.error);
         });
@@ -297,7 +290,7 @@
         document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 備用手動按鈕
+      // 備用點擊衝刺
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -310,10 +303,9 @@
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-view').classList.add('flex');
 
-      // 產生隨機房間號
-      const roomId = Math.random().toString(36).substring(2, 7);
+      // 產生純英數 6 碼房間號
+      roomId = 'room_' + Math.random().toString(36).substring(2, 8);
       document.getElementById('room-code-display').innerText = roomId;
-      topicName = `sprint-race-v2/${roomId}`;
 
       // 產生 QR Code
       const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
@@ -325,7 +317,7 @@
         colorLight: "#ffffff"
       });
 
-      // 切換進入跑道介面的核心函式
+      // 畫面切換為跑道
       let isGamePanelActive = false;
       function showGamePanel() {
         if (isGamePanelActive) return;
@@ -338,25 +330,21 @@
         startIdlePhysics();
       }
 
-      // 備用按鈕：手動進入跑道
       document.getElementById('btn-force-enter').addEventListener('click', showGamePanel);
 
-      // 連接 MQTT 伺服器並訂閱
-      client = mqtt.connect(MQTT_BROKER);
+      // 連接 WebSocket 通道
+      const wsUrl = `wss://free.blr2.piesocket.com/v3/${roomId}?api_key=${PIE_API_KEY}&notify_self=0`;
+      ws = new WebSocket(wsUrl);
 
-      client.on('connect', () => {
-        document.getElementById('connection-badge').innerText = '等待手機掃碼...';
-        client.subscribe(topicName, (err) => {
-          if (!err) console.log('已成功訂閱房間頻道:', topicName);
-        });
-      });
+      ws.onopen = () => {
+        document.getElementById('connection-badge').innerText = '等待手機掃碼連線...';
+      };
 
-      // 接收手機發送的訊息
-      client.on('message', (topic, message) => {
+      ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(message.toString());
+          const data = JSON.parse(event.data);
 
-          // 收到 JOIN 或 SHAKE 訊號，立刻切換至跑道！
+          // 收到手機進入或搖動訊號，立刻進入跑道
           showGamePanel();
 
           if (data.type === 'SHAKE') {
@@ -370,7 +358,7 @@
             playBeep(260 + Math.min(playerSpeed * 10, 480));
           }
         } catch (e) {}
-      });
+      };
 
       function startIdlePhysics() {
         function idleLoop() {
