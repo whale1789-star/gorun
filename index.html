@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山體感賽跑 100M - 即時訊號強化版</title>
-  <!-- 載入 PeerJS、QRCode 與 Confetti 特效 -->
+  <title>112233體感賽跑 100M - 連線保證直通版</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -30,14 +29,14 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 即時封包監控版</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 即時狀態監控</p>
       </div>
       <div class="flex items-center gap-2">
-        <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded border border-slate-700 text-slate-400">
+        <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
           訊號接收: 0
         </span>
         <div id="connection-badge" class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-semibold">
-          等待手機連線...
+          等待配對...
         </div>
       </div>
     </header>
@@ -45,7 +44,7 @@
     <!-- 尚未連線：配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後立即成為體感手把，搖動手機即可前進！</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">掃描後手機將變成無線體感控制器</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
         房間代碼：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
@@ -54,7 +53,6 @@
 
     <!-- 已連線：比賽跑道區域 -->
     <div id="game-panel" class="hidden flex-1 flex-col justify-center gap-6">
-      <!-- 狀態列 -->
       <div class="grid grid-cols-3 gap-4 text-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
         <div>
           <div class="text-xs text-slate-400">競賽時間</div>
@@ -72,7 +70,6 @@
 
       <!-- 田徑跑道 -->
       <div class="relative bg-orange-800/90 rounded-2xl p-6 border-4 border-orange-950 shadow-inner overflow-hidden flex flex-col gap-6">
-        <!-- 跑道標線 -->
         <div class="absolute inset-0 flex justify-between px-10 pointer-events-none opacity-20">
           <div class="border-r-2 border-dashed border-white h-full"></div>
           <div class="border-r-2 border-dashed border-white h-full"></div>
@@ -115,7 +112,6 @@
         </div>
       </div>
 
-      <!-- 控制按鈕 -->
       <div class="flex justify-center gap-4">
         <button id="btn-start" class="px-8 py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-xl text-lg shadow-lg active:scale-95 transition">
           起跑鳴槍
@@ -131,51 +127,41 @@
   <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-6 max-w-md mx-auto w-full text-center">
     <div>
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
-      <h1 class="text-2xl font-black text-amber-400">大力搖晃手機！</h1>
-      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs">
-        連線中...
+      <h1 class="text-2xl font-black text-amber-400">狂搖手機加速！</h1>
+      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
+        正在連線至伺服器...
       </div>
     </div>
 
-    <!-- iOS 授權按鈕 -->
-    <div id="ios-permission-box" class="hidden my-auto w-full p-6 bg-slate-800 border border-amber-500/40 rounded-2xl">
-      <p class="text-sm mb-4 text-slate-200">iOS Safari 請點擊下方按鈕以啟用動作感測功能：</p>
-      <button id="btn-ios-auth" class="w-full py-4 bg-amber-500 text-slate-900 font-bold text-lg rounded-xl shadow-lg active:scale-95 transition">
-        授權體感感測器
+    <!-- iOS 授權區塊 -->
+    <div id="ios-permission-box" class="my-3 w-full p-4 bg-slate-800 border border-amber-500/40 rounded-2xl">
+      <p class="text-xs mb-2 text-slate-300">iPhone / Safari 必須點擊此處啟用體感：</p>
+      <button id="btn-ios-auth" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-sm rounded-xl shadow-lg active:scale-95 transition">
+        點此啟用體感感測
       </button>
     </div>
 
     <!-- 體感動力儀表與除錯讀數 -->
     <div id="motion-box" class="my-auto flex flex-col items-center justify-center">
-      <div class="relative w-48 h-48 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
+      <div class="relative w-44 h-44 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
         <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
         <div class="relative z-10">
           <div class="text-4xl font-black text-amber-400" id="motion-val">0</div>
           <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">體感強度</div>
         </div>
       </div>
-      <div id="debug-text" class="text-[11px] font-mono text-slate-400 mt-4">等待感測器數據...</div>
-      <div id="send-status" class="text-xs font-mono text-emerald-400 mt-1">累計送出: 0 次</div>
+      <div id="debug-text" class="text-[11px] font-mono text-slate-400 mt-3">感測器：等待數據</div>
+      <div id="send-status" class="text-sm font-mono text-emerald-400 font-bold mt-1">累計送出: 0 次</div>
     </div>
 
     <!-- 備用手動按鈕 -->
     <button id="btn-touch-boost" class="w-full py-5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
-      🔥 點擊衝刺 (測試連線)
+      🔥 點擊衝刺 (測試送出)
     </button>
   </div>
 
   <!-- ==================== 前端邏輯核心腳本 ==================== -->
   <script>
-    // 穿透性更高的 STUN 配置
-    const peerConfig = {
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      }
-    };
-
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
 
@@ -216,21 +202,39 @@
       document.getElementById('controller-view').classList.remove('hidden');
       document.getElementById('controller-view').classList.add('flex');
 
-      peer = new Peer(peerConfig);
-      peer.on('open', () => {
+      const statusEl = document.getElementById('mobile-conn-status');
+
+      // 初始化 Peer
+      peer = new Peer();
+
+      peer.on('open', (id) => {
+        statusEl.innerText = '正在配對大螢幕...';
         conn = peer.connect(roomParam, { reliable: true });
+
         conn.on('open', () => {
-          document.getElementById('mobile-conn-status').innerText = '✅ 連線成功！請看大螢幕';
-          document.getElementById('mobile-conn-status').className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
+          statusEl.innerText = '✅ 連線成功！可開始搖晃';
+          statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
           if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        });
+
+        conn.on('error', (err) => {
+          statusEl.innerText = '連線錯誤：' + err;
         });
       });
 
+      peer.on('error', (err) => {
+        statusEl.innerText = '伺服器連線異常，請重整網頁';
+      });
+
+      // 核心發送函式（不設死 conn.open，若未連線跳出提示）
       function sendSpeedBoost(power) {
+        totalPacketsSent++;
+        document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
+
         if (conn && conn.open) {
-          totalPacketsSent++;
           conn.send({ type: 'SHAKE', power: Number(power) || 15 });
-          document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
+        } else {
+          statusEl.innerText = '⚠️ 通道建立中，請稍候再按...';
         }
       }
 
@@ -260,37 +264,35 @@
         document.getElementById('motion-fill').style.transform = `scale(${scaleVal})`;
 
         const now = Date.now();
-        // 門檻降至 4.5，高靈敏度
-        if (movement > 4.5 && now - lastSendTime > 45) {
+        // 降低門檻，保證搖動必觸發
+        if (movement > 3.5 && now - lastSendTime > 40) {
           lastSendTime = now;
           sendSpeedBoost(movement);
           if (navigator.vibrate) navigator.vibrate(15);
         }
       }
 
-      // iOS 授權機制
+      // 註冊體感事件
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-        const iosBox = document.getElementById('ios-permission-box');
-        const motionBox = document.getElementById('motion-box');
-        iosBox.classList.remove('hidden');
-        motionBox.classList.add('hidden');
-
         document.getElementById('btn-ios-auth').addEventListener('click', () => {
           DeviceMotionEvent.requestPermission().then(res => {
             if (res === 'granted') {
               window.addEventListener('devicemotion', handleMotion);
-              iosBox.classList.add('hidden');
-              motionBox.classList.remove('hidden');
+              document.getElementById('ios-permission-box').classList.add('hidden');
+              document.getElementById('debug-text').innerText = '感測器：已授權啟用';
             } else {
-              alert('未取得體感授權');
+              alert('未取得體感授權，請至 Safari 設定允許動作與方向');
             }
           }).catch(console.error);
         });
       } else {
+        // Android / 一般瀏覽器直接掛載
         window.addEventListener('devicemotion', handleMotion);
+        document.getElementById('ios-permission-box').classList.add('hidden');
+        document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 備用按鈕：直接發送推力
+      // 測試點擊按鈕：不管有沒有搖晃，點了就送
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -306,7 +308,7 @@
       const roomId = 'sprint-' + Math.random().toString(36).substring(2, 7);
       document.getElementById('room-code-display').innerText = roomId;
 
-      peer = new Peer(roomId, peerConfig);
+      peer = new Peer(roomId);
       peer.on('open', (id) => {
         const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
         new QRCode(document.getElementById('qrcode'), {
@@ -320,14 +322,16 @@
 
       peer.on('connection', (connection) => {
         conn = connection;
-        document.getElementById('connection-badge').innerText = '✅ 手機已連線';
-        document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
-        document.getElementById('qr-panel').classList.add('hidden');
-        document.getElementById('game-panel').classList.remove('hidden');
-        document.getElementById('game-panel').classList.add('flex');
+        
+        conn.on('open', () => {
+          document.getElementById('connection-badge').innerText = '✅ 手機已就緒';
+          document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
+          document.getElementById('qr-panel').classList.add('hidden');
+          document.getElementById('game-panel').classList.remove('hidden');
+          document.getElementById('game-panel').classList.add('flex');
 
-        // 啟動背景時速阻力衰減動畫（即使未鳴槍也能預熱測試時速）
-        startIdlePhysics();
+          startIdlePhysics();
+        });
 
         conn.on('data', (data) => {
           if (data && data.type === 'SHAKE') {
@@ -337,15 +341,12 @@
             const rawPower = Number(data.power) || 12;
             playerSpeed += Math.min(rawPower * 0.5, 7.0);
 
-            // 雙腿擺動
             document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.remove('paused'));
-
             playBeep(260 + Math.min(playerSpeed * 10, 480));
           }
         });
       });
 
-      // 未鳴槍前的熱身監聽迴圈
       function startIdlePhysics() {
         function idleLoop() {
           if (!isRunning) {
@@ -400,14 +401,11 @@
         const elapsed = (Date.now() - startTime) / 1000;
         document.getElementById('timer-text').innerText = elapsed.toFixed(2) + 's';
 
-        // 摩擦阻力
         playerSpeed *= 0.97;
         if (playerSpeed < 0.05) playerSpeed = 0;
 
-        // AI 速度
         aiSpeed = 1.35 + Math.sin(Date.now() / 250) * 0.35;
 
-        // 距離前進
         playerDist += playerSpeed * 0.28;
         aiDist += aiSpeed * 0.28;
 
@@ -421,7 +419,6 @@
         document.getElementById('player-runner').style.left = `${playerPercent}%`;
         document.getElementById('ai-runner').style.left = `${aiPercent}%`;
 
-        // 終點衝線判定
         if (playerDist >= 100 || aiDist >= 100) {
           isRunning = false;
           document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
