@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山賽跑 100M - 高靈敏度版</title>
-  <!-- 載入 PeerJS (點對點連線)、QRCode 與 Confetti 特效套件 -->
+  <title>體感賽跑 100M - 除錯修復版</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -30,7 +29,7 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕顯示端 · 高靈敏體感加速版</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕顯示端 · WebRTC 直連修復版</p>
       </div>
       <div id="connection-badge" class="px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-semibold">
         等待手機連線...
@@ -40,7 +39,7 @@
     <!-- 尚未連線：顯示配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後立即成為體感手把，自然擺手或大力搖晃即可全速前進！</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後立即成為體感手把，請務必先在電腦上點擊「起跑鳴槍」！</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
         房間代碼：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
@@ -61,13 +60,12 @@
         </div>
         <div>
           <div class="text-xs text-slate-400">賽事狀態</div>
-          <div id="race-status" class="text-2xl font-bold text-emerald-400">準備起跑</div>
+          <div id="race-status" class="text-2xl font-bold text-amber-400">請按起跑鳴槍</div>
         </div>
       </div>
 
       <!-- 田徑跑道 -->
       <div class="relative bg-orange-800/90 rounded-2xl p-6 border-4 border-orange-950 shadow-inner overflow-hidden flex flex-col gap-6">
-        <!-- 跑道標線背景 -->
         <div class="absolute inset-0 flex justify-between px-10 pointer-events-none opacity-20">
           <div class="border-r-2 border-dashed border-white h-full"></div>
           <div class="border-r-2 border-dashed border-white h-full"></div>
@@ -82,12 +80,10 @@
             <svg class="w-12 h-12 text-amber-400" viewBox="0 0 60 60" fill="currentColor">
               <circle cx="30" cy="12" r="7" />
               <rect x="25" y="20" width="10" height="22" rx="3" />
-              <!-- 雙腿動畫 -->
               <rect id="p-leg-l" class="anim-leg-left paused" x="24" y="38" width="5" height="18" rx="2" fill="#f59e0b" />
               <rect id="p-leg-r" class="anim-leg-right paused" x="31" y="38" width="5" height="18" rx="2" fill="#d97706" />
             </svg>
           </div>
-          <!-- 終點線 -->
           <div class="absolute right-6 top-0 bottom-0 w-2 bg-white flex flex-col justify-around">
             <div class="h-2 bg-red-600"></div>
             <div class="h-2 bg-red-600"></div>
@@ -129,34 +125,35 @@
     <div>
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
       <h1 class="text-2xl font-black text-amber-400">擺動或狂搖手機加速！</h1>
-      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs">
-        已連接至主螢幕
+      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs">
+        連線中...
       </div>
     </div>
 
     <!-- iOS 授權引導按鈕 -->
     <div id="ios-permission-box" class="hidden my-auto w-full p-6 bg-slate-800 border border-amber-500/40 rounded-2xl">
-      <p class="text-sm mb-4 text-slate-200">iOS Safari 需要點擊下方按鈕以啟用「動作與方向感測」功能：</p>
+      <p class="text-sm mb-4 text-slate-200">iOS Safari 需點擊下方按鈕以啟用動作感測功能：</p>
       <button id="btn-ios-auth" class="w-full py-4 bg-amber-500 text-slate-900 font-bold text-lg rounded-xl shadow-lg active:scale-95 transition">
         授權體感感測器
       </button>
     </div>
 
-    <!-- 體感動力儀表 -->
+    <!-- 體感動力儀表與即時數據 -->
     <div id="motion-box" class="my-auto flex flex-col items-center justify-center">
       <div class="relative w-48 h-48 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
         <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
         <div class="relative z-10">
           <div class="text-4xl font-black text-amber-400" id="motion-val">0</div>
-          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">體感動力</div>
+          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">即時感測強度</div>
         </div>
       </div>
-      <p class="text-xs text-slate-400 mt-6 max-w-[220px]">自然前後揮動（模擬跑步擺臂）或上下搖晃即可輸出動力！</p>
+      <!-- 偵錯資訊顯示 -->
+      <div id="debug-text" class="text-[11px] font-mono text-slate-500 mt-4">等待感測器數據...</div>
     </div>
 
     <!-- 備用觸控加速鈕 -->
     <button id="btn-touch-boost" class="w-full py-5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
-      🔥 點擊衝刺 (備用)
+      🔥 點擊衝刺 (測試通道)
     </button>
   </div>
 
@@ -175,15 +172,15 @@
     let startTime = 0;
     let gameLoopId = null;
 
-    // 音效引擎 (Web Audio API)
+    // 音效引擎
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    function playBeep(freq, type = 'sine', duration = 0.12) {
+    function playBeep(freq, type = 'sine', duration = 0.1) {
       if (audioCtx.state === 'suspended') audioCtx.resume();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = type;
       osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
@@ -192,7 +189,7 @@
     }
 
     // ============================================================
-    // 角色 A：手機手把端 (Controller) - 提高靈敏度與採樣率
+    // 角色 A：手機手把端 (Controller)
     // ============================================================
     if (roomParam) {
       document.getElementById('controller-view').classList.remove('hidden');
@@ -202,7 +199,8 @@
       peer.on('open', (id) => {
         conn = peer.connect(roomParam);
         conn.on('open', () => {
-          document.getElementById('mobile-conn-status').innerText = '已成功連線至跑道';
+          document.getElementById('mobile-conn-status').innerText = '✅ 已成功連線至大螢幕';
+          document.getElementById('mobile-conn-status').className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs';
           if (navigator.vibrate) navigator.vibrate([80, 40, 80]);
         });
       });
@@ -211,27 +209,35 @@
       let lastSendTime = 0;
 
       function handleMotion(e) {
-        // 優先讀取不帶重力的純動作加速度，若不支援則使用含重力值
-        const acc = e.acceleration || e.accelerationIncludingGravity;
+        // 同時檢驗含重力與不含重力加速度，防範屬性為 null
+        let acc = e.acceleration;
+        if (!acc || acc.x === null) {
+          acc = e.accelerationIncludingGravity;
+        }
         if (!acc || acc.x === null) return;
 
-        // 計算三軸加速度變化量
-        const deltaX = Math.abs((acc.x || 0) - lastAcc.x);
-        const deltaY = Math.abs((acc.y || 0) - lastAcc.y);
-        const deltaZ = Math.abs((acc.z || 0) - lastAcc.z);
+        const curX = Number(acc.x) || 0;
+        const curY = Number(acc.y) || 0;
+        const curZ = Number(acc.z) || 0;
+
+        const deltaX = Math.abs(curX - lastAcc.x);
+        const deltaY = Math.abs(curY - lastAcc.y);
+        const deltaZ = Math.abs(curZ - lastAcc.z);
         const movement = deltaX + deltaY + deltaZ;
 
-        lastAcc = { x: acc.x || 0, y: acc.y || 0, z: acc.z || 0 };
+        lastAcc = { x: curX, y: curY, z: curZ };
 
-        // 數值顯示與儀表視覺回饋
-        const displayVal = Math.min(Math.round(movement * 3), 99);
+        // 更新介面數值與儀表
+        const displayVal = Math.min(Math.round(movement * 2.5), 99);
         document.getElementById('motion-val').innerText = displayVal;
+        document.getElementById('debug-text').innerText = `X:${curX.toFixed(1)} Y:${curY.toFixed(1)} Z:${curZ.toFixed(1)}`;
+        
         const scaleVal = Math.min(0.5 + movement / 20, 1.1);
         document.getElementById('motion-fill').style.transform = `scale(${scaleVal})`;
 
-        // 【靈敏度關鍵調整】：門檻由 18 降至 8，頻率間隔縮減至 40ms
+        // 門檻降至 5，發送間隔 40ms
         const now = Date.now();
-        if (movement > 8 && now - lastSendTime > 40) {
+        if (movement > 5 && now - lastSendTime > 40) {
           lastSendTime = now;
           if (conn && conn.open) {
             conn.send({ type: 'SHAKE', power: movement });
@@ -240,7 +246,7 @@
         }
       }
 
-      // iOS 13+ 權限請求處理
+      // iOS 授權機制
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         const iosBox = document.getElementById('ios-permission-box');
         const motionBox = document.getElementById('motion-box');
@@ -254,7 +260,7 @@
               iosBox.classList.add('hidden');
               motionBox.classList.remove('hidden');
             } else {
-              alert('未取得感測器授權，請允許權限以啟用體感功能');
+              alert('未取得授權，請在 Safari 設定中開啟動作與方向存取');
             }
           }).catch(console.error);
         });
@@ -262,16 +268,16 @@
         window.addEventListener('devicemotion', handleMotion);
       }
 
-      // 備用觸控按鈕
+      // 備用按鈕：發送固定的推力訊號
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         if (conn && conn.open) {
-          conn.send({ type: 'SHAKE', power: 25 });
+          conn.send({ type: 'SHAKE', power: 30 });
         }
         if (navigator.vibrate) navigator.vibrate(30);
       });
 
     // ============================================================
-    // 角色 B：電腦大螢幕跑道 (Host) - 強化動力轉化與慣性滑行
+    // 角色 B：電腦大螢幕跑道 (Host)
     // ============================================================
     } else {
       document.getElementById('host-view').classList.remove('hidden');
@@ -294,29 +300,35 @@
 
       peer.on('connection', (connection) => {
         conn = connection;
-        document.getElementById('connection-badge').innerText = '手機控制器已就緒';
+        document.getElementById('connection-badge').innerText = '✅ 手機已連線';
         document.getElementById('connection-badge').className = 'px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-semibold';
         document.getElementById('qr-panel').classList.add('hidden');
         document.getElementById('game-panel').classList.remove('hidden');
         document.getElementById('game-panel').classList.add('flex');
 
         conn.on('data', (data) => {
-          if (data.type === 'SHAKE' && isRunning) {
-            // 【動力增益關鍵調整】：推力倍增，最大單次上限提高至 6.0
-            playerSpeed += Math.min(data.power * 0.45, 6.0);
-            playBeep(260 + Math.min(playerSpeed * 12, 500), 'triangle', 0.06);
+          if (data && data.type === 'SHAKE') {
+            const rawPower = Number(data.power) || 10;
+            // 只要收到搖晃訊號就賦予推進力
+            playerSpeed += Math.min(rawPower * 0.45, 6.0);
+            
+            // 起跑前也可以熱身看時速跳動
+            if (!isRunning) {
+              const kmh = (playerSpeed * 8.5).toFixed(1);
+              document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
+            } else {
+              playBeep(260 + Math.min(playerSpeed * 12, 500), 'triangle', 0.05);
+            }
           }
         });
       });
 
-      // 起跑按鈕
       document.getElementById('btn-start').addEventListener('click', () => {
         if (isRunning) return;
         resetRace();
         startCountdown();
       });
 
-      // 重置按鈕
       document.getElementById('btn-reset').addEventListener('click', resetRace);
 
       function startCountdown() {
@@ -333,7 +345,8 @@
           } else {
             clearInterval(timer);
             statusEl.innerText = '衝刺中！';
-            playBeep(880, 'square', 0.3); // 鳴槍聲
+            statusEl.className = 'text-2xl font-bold text-emerald-400';
+            playBeep(880, 'square', 0.25);
             isRunning = true;
             startTime = Date.now();
             document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.remove('paused'));
@@ -348,22 +361,22 @@
         const elapsed = (Date.now() - startTime) / 1000;
         document.getElementById('timer-text').innerText = elapsed.toFixed(2) + 's';
 
-        // 【摩擦力阻力調整】：由 0.94 改為 0.97，滑行慣性更順暢，擺臂不卡頓
+        // 慣性滑行摩擦力
         playerSpeed *= 0.97;
         if (playerSpeed < 0.05) playerSpeed = 0;
 
-        // AI 對手速度曲線 (基準巡航 + 微幅波動)
+        // AI 選手速度
         aiSpeed = 1.35 + Math.sin(Date.now() / 250) * 0.35;
 
-        // 更新跑道位移距離
+        // 距離累加
         playerDist += playerSpeed * 0.28;
         aiDist += aiSpeed * 0.28;
 
-        // 更新即時時速顯示 (km/h)
+        // 更新即時時速顯示
         const kmh = (playerSpeed * 8.5).toFixed(1);
         document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-sm font-normal text-slate-400">km/h</span>`;
 
-        // 跑道邊界 (最大顯示比例 88%)
+        // 跑道進度
         const maxPercent = 88;
         const playerPercent = Math.min((playerDist / 100) * maxPercent, maxPercent);
         const aiPercent = Math.min((aiDist / 100) * maxPercent, maxPercent);
@@ -371,7 +384,7 @@
         document.getElementById('player-runner').style.left = `${playerPercent}%`;
         document.getElementById('ai-runner').style.left = `${aiPercent}%`;
 
-        // 衝線結算判定 (先達 100m 者勝)
+        // 衝線結算
         if (playerDist >= 100 || aiDist >= 100) {
           isRunning = false;
           document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
@@ -400,7 +413,8 @@
         document.getElementById('ai-runner').style.left = '16px';
         document.getElementById('timer-text').innerText = '00.00s';
         document.getElementById('speed-text').innerHTML = `0.0 <span class="text-sm font-normal text-slate-400">km/h</span>`;
-        document.getElementById('race-status').innerText = '準備起跑';
+        document.getElementById('race-status').innerText = '請按起跑鳴槍';
+        document.getElementById('race-status').className = 'text-2xl font-bold text-amber-400';
         document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
       }
     }
