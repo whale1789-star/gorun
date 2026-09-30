@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>22體感賽跑 100M - 高穿透直通版</title>
-  <!-- 載入 QRCode 與 Confetti 特效套件 (改用純原生 WebSocket，不需外部通訊函式庫) -->
+  <title>3333體感賽跑 100M - HiveMQ 全球直通版</title>
+  <!-- 載入 MQTT 即時通訊套件、QRCode 與 Confetti 特效套件 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -29,7 +30,7 @@
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
         <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 100M 體感田徑衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 原生 WebSocket 直通通道</p>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · HiveMQ 公開雲端直通</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
@@ -44,7 +45,7 @@
     <!-- 尚未連線：配對 QR Code -->
     <div id="qr-panel" class="bg-slate-800 rounded-2xl p-6 border border-slate-700 flex flex-col items-center justify-center my-auto shadow-2xl text-center">
       <h2 class="text-xl font-bold mb-2">拿起手機掃描 QR Code 連線</h2>
-      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後將自動連接專屬通訊頻道！</p>
+      <p class="text-slate-400 text-sm mb-6 max-w-md">手機掃描後將自動連接專屬競賽頻道</p>
       <div id="qrcode" class="bg-white p-4 rounded-xl shadow-inner inline-block"></div>
       <div class="mt-4 text-xs text-slate-400">
         專屬房間：<span id="room-code-display" class="font-mono text-amber-400 font-bold text-sm tracking-widest">---</span>
@@ -164,16 +165,16 @@
     </button>
   </div>
 
-  <!-- ==================== 前端邏輯核心腳本 (PieSocket 原生 WebSocket 通道) ==================== -->
+  <!-- ==================== 前端邏輯核心腳本 (HiveMQ 公開 Broker) ==================== -->
   <script>
-    // 使用全球高可用性 PieSocket 原生 WebSocket 通道 (Demo API Key，免金鑰且具備全域廣播保證)
-    const PIE_API_KEY = 'VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV';
+    // 使用全球最大且穩定的公開 MQTT WebSocket 伺服器 (SSL 8884 埠，免金鑰)
+    const MQTT_BROKER = 'wss://broker.hivemq.com:8884/mqtt';
     
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
 
-    let ws = null;
-    let roomId = '';
+    let client = null;
+    let topicName = '';
     let playerDist = 0;
     let aiDist = 0;
     let playerSpeed = 0;
@@ -209,32 +210,38 @@
       document.getElementById('controller-view').classList.remove('hidden');
       document.getElementById('controller-view').classList.add('flex');
 
-      roomId = roomParam;
-      document.getElementById('channel-info').innerText = `頻道代號：${roomId}`;
+      topicName = `sprint-race-hivemq/${roomParam}`;
+      document.getElementById('channel-info').innerText = `頻道：${roomParam}`;
       const statusEl = document.getElementById('mobile-conn-status');
 
-      // 建立原生 WebSocket 連線
-      const wsUrl = `wss://free.blr2.piesocket.com/v3/${roomId}?api_key=${PIE_API_KEY}&notify_self=0`;
-      ws = new WebSocket(wsUrl);
+      // 建立 MQTT 連線
+      const clientId = 'runner_m_' + Math.random().toString(16).substring(2, 8);
+      client = mqtt.connect(MQTT_BROKER, { clientId: clientId, clean: true, reconnectPeriod: 2000 });
 
-      ws.onopen = () => {
+      client.on('connect', () => {
         statusEl.innerText = '✅ 連線成功！大螢幕已同步';
         statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
         if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
 
         // 發送進入訊號
-        ws.send(JSON.stringify({ type: 'JOIN' }));
-      };
+        client.publish(topicName, JSON.stringify({ type: 'JOIN' }));
+      });
 
-      ws.onerror = (e) => {
-        statusEl.innerText = '連線異常，請重整網頁';
-      };
+      client.on('offline', () => {
+        statusEl.innerText = '⚠️ 網路重連中...';
+      });
 
+      client.on('error', (err) => {
+        statusEl.innerText = '連線異常，正在重試';
+      });
+
+      // 核心發送函式：計數器優先累加，並發送 MQTT
       function sendSpeedBoost(power) {
-        if (ws && ws.readyState === WebSocket.OPEN) {
-          totalPacketsSent++;
-          document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
-          ws.send(JSON.stringify({ type: 'SHAKE', power: Number(power) || 15 }));
+        totalPacketsSent++;
+        document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
+
+        if (client && client.connected) {
+          client.publish(topicName, JSON.stringify({ type: 'SHAKE', power: Number(power) || 15 }));
         }
       }
 
@@ -290,7 +297,7 @@
         document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 備用點擊衝刺
+      // 備用手動按鈕
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -303,9 +310,10 @@
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-view').classList.add('flex');
 
-      // 產生純英數 6 碼房間號
-      roomId = 'room_' + Math.random().toString(36).substring(2, 8);
+      // 產生純英數 5 碼房間號
+      const roomId = Math.random().toString(36).substring(2, 7);
       document.getElementById('room-code-display').innerText = roomId;
+      topicName = `sprint-race-hivemq/${roomId}`;
 
       // 產生 QR Code
       const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
@@ -317,7 +325,7 @@
         colorLight: "#ffffff"
       });
 
-      // 畫面切換為跑道
+      // 進入跑道畫面函式
       let isGamePanelActive = false;
       function showGamePanel() {
         if (isGamePanelActive) return;
@@ -332,19 +340,23 @@
 
       document.getElementById('btn-force-enter').addEventListener('click', showGamePanel);
 
-      // 連接 WebSocket 通道
-      const wsUrl = `wss://free.blr2.piesocket.com/v3/${roomId}?api_key=${PIE_API_KEY}&notify_self=0`;
-      ws = new WebSocket(wsUrl);
+      // 連接 HiveMQ Broker 並訂閱頻道
+      const clientId = 'runner_h_' + Math.random().toString(16).substring(2, 8);
+      client = mqtt.connect(MQTT_BROKER, { clientId: clientId, clean: true });
 
-      ws.onopen = () => {
+      client.on('connect', () => {
         document.getElementById('connection-badge').innerText = '等待手機掃碼連線...';
-      };
+        client.subscribe(topicName, (err) => {
+          if (!err) console.log('已成功訂閱頻道:', topicName);
+        });
+      });
 
-      ws.onmessage = (event) => {
+      // 接收手機端訊息
+      client.on('message', (topic, payload) => {
         try {
-          const data = JSON.parse(event.data);
+          const data = JSON.parse(payload.toString());
 
-          // 收到手機進入或搖動訊號，立刻進入跑道
+          // 只要有任何訊息（JOIN 或 SHAKE），立即切換至跑道
           showGamePanel();
 
           if (data.type === 'SHAKE') {
@@ -354,12 +366,14 @@
             const rawPower = Number(data.power) || 12;
             playerSpeed += Math.min(rawPower * 0.5, 7.0);
 
+            // 雙腿擺動與音效
             document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.remove('paused'));
             playBeep(260 + Math.min(playerSpeed * 10, 480));
           }
         } catch (e) {}
-      };
+      });
 
+      // 未鳴槍前的熱身監聽迴圈 (讓時速表在未起跑前也能動)
       function startIdlePhysics() {
         function idleLoop() {
           if (!isRunning) {
