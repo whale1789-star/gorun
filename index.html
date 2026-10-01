@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山盃賽跑 400M - 耐力衝刺版</title>
+  <title>體感賽跑 400M - 擬真體能版</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -28,8 +28,8 @@
   <div id="host-view" class="hidden flex-1 flex-col p-4 md:p-8 max-w-6xl mx-auto w-full">
     <header class="flex justify-between items-center mb-4 border-b border-slate-700 pb-3">
       <div>
-        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 中山盃400M 田徑耐力衝刺賽</h1>
-        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 操場一圈長距離競速</p>
+        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 400M 田徑耐力衝刺賽</h1>
+        <p class="text-xs md:text-sm text-slate-400">大螢幕端 · 擬真人體極限物理模型</p>
       </div>
       <div class="flex items-center gap-2">
         <span id="packet-counter" class="text-xs font-mono bg-slate-800 px-3 py-1 rounded border border-slate-700 text-amber-400 font-bold">
@@ -56,7 +56,7 @@
 
     <!-- 比賽跑道區域 -->
     <div id="game-panel" class="hidden flex-1 flex-col justify-center gap-6">
-      <!-- 4 欄狀態列 (加入剩餘距離) -->
+      <!-- 4 欄狀態列 (加入合理的人類時速顯示) -->
       <div class="grid grid-cols-4 gap-3 text-center bg-slate-800/80 p-4 rounded-xl border border-slate-700">
         <div>
           <div class="text-xs text-slate-400">競賽時間</div>
@@ -67,7 +67,7 @@
           <div id="remain-dist-text" class="text-2xl font-mono font-bold text-cyan-400">400 <span class="text-xs font-normal text-slate-400">m</span></div>
         </div>
         <div>
-          <div class="text-xs text-slate-400">即時時速</div>
+          <div class="text-xs text-slate-400">玩家時速 (人類極限~44)</div>
           <div id="speed-text" class="text-2xl font-mono font-black text-amber-400">0.0 <span class="text-xs font-normal text-slate-400">km/h</span></div>
         </div>
         <div>
@@ -78,7 +78,6 @@
 
       <!-- 田徑跑道 -->
       <div class="relative bg-orange-800/90 rounded-2xl p-6 border-4 border-orange-950 shadow-inner overflow-hidden flex flex-col gap-6">
-        <!-- 100m, 200m, 300m 距離分段指示線 -->
         <div class="absolute inset-0 flex justify-between px-12 pointer-events-none opacity-20">
           <div class="border-r border-dashed border-white h-full relative"><span class="absolute -top-1 -left-4 text-[9px] text-white">100m</span></div>
           <div class="border-r border-dashed border-white h-full relative"><span class="absolute -top-1 -left-4 text-[9px] text-white">200m</span></div>
@@ -105,7 +104,7 @@
 
         <!-- 跑道 2：AI 對手 -->
         <div class="relative bg-orange-700/60 rounded-xl h-24 flex items-center px-4 border border-orange-600/40">
-          <div class="absolute left-3 top-2 text-[10px] font-bold text-orange-200">2P 電腦選手 (AI)</div>
+          <div class="absolute left-3 top-2 text-[10px] font-bold text-orange-200">2P 電腦選手 (AI: 24~32 km/h)</div>
           <div id="ai-runner" class="absolute left-4 transition-all duration-75 flex flex-col items-center">
             <svg class="w-12 h-12 text-cyan-400" viewBox="0 0 60 60" fill="currentColor">
               <circle cx="30" cy="12" r="7" />
@@ -136,7 +135,7 @@
   <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-6 max-w-md mx-auto w-full text-center">
     <div>
       <div class="text-xs uppercase tracking-wider text-slate-400 mb-1">體感無線控制器</div>
-      <h1 class="text-2xl font-black text-amber-400">400M 耐力狂搖！</h1>
+      <h1 class="text-2xl font-black text-amber-400">400M 耐力衝刺！</h1>
       <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
         連線中...
       </div>
@@ -157,7 +156,7 @@
         <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
         <div class="relative z-10">
           <div class="text-4xl font-black text-amber-400" id="motion-val">0</div>
-          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">體感強度</div>
+          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">擺臂強度</div>
         </div>
       </div>
       <div id="debug-text" class="text-[11px] font-mono text-slate-400 mt-3">感測器：等待數據</div>
@@ -170,10 +169,9 @@
     </button>
   </div>
 
-  <!-- ==================== 前端核心邏輯 ==================== -->
+  <!-- ==================== 前端核心邏輯 (擬真人體物理模型) ==================== -->
   <script>
-    // 目標總距離改為 400 米
-    const TOTAL_DISTANCE = 400;
+    const TOTAL_DISTANCE = 400; // 400 公尺賽事
 
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
@@ -182,8 +180,11 @@
     let conn = null;
     let playerDist = 0;
     let aiDist = 0;
-    let playerSpeed = 0;
-    let aiSpeed = 0;
+    
+    // speed 單位直接統一為真實的 km/h
+    let playerKmh = 0;
+    let aiKmh = 0;
+
     let isRunning = false;
     let startTime = 0;
     let gameLoopId = null;
@@ -286,7 +287,6 @@
         }
       }
 
-      // iOS 授權機制
       if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
         document.getElementById('btn-ios-auth').addEventListener('click', () => {
           DeviceMotionEvent.requestPermission().then(res => {
@@ -295,7 +295,7 @@
               document.getElementById('ios-permission-box').classList.add('hidden');
               document.getElementById('debug-text').innerText = '感測器：已授權啟用';
             } else {
-              alert('未取得體感授權，請在 Safari 設定中開啟動作與方向存取');
+              alert('未取得體感授權');
             }
           }).catch(console.error);
         });
@@ -305,7 +305,6 @@
         document.getElementById('debug-text').innerText = '感測器：運作中';
       }
 
-      // 備用手動按鈕
       document.getElementById('btn-touch-boost').addEventListener('click', () => {
         sendSpeedBoost(28);
         if (navigator.vibrate) navigator.vibrate(30);
@@ -380,25 +379,38 @@
             document.getElementById('packet-counter').innerText = `訊號接收: ${totalPacketsReceived}`;
             
             const rawPower = Number(data.power) || 12;
-            // 每次搖晃賦予爆發推進力
-            playerSpeed += Math.min(rawPower * 0.45, 6.0);
+
+            // 【擬真人體物理推力計算】：
+            // 基礎提升幅度：每次搖晃約提升 2.0 ~ 3.5 km/h
+            let boost = Math.min(rawPower * 0.18, 3.5);
+
+            // 邊際效益遞減：時速超過 28 km/h 之後，人體面臨巨大風阻與肌肉極限，加速難度倍增
+            if (playerKmh > 28) {
+              const resistanceFactor = Math.max(0.1, (43.5 - playerKmh) / 15.5);
+              boost *= resistanceFactor;
+            }
+
+            playerKmh += boost;
+
+            // 硬上限：人類極限鎖定在 43.5 km/h (接近 Usain Bolt 44.72 km/h)
+            if (playerKmh > 43.5) playerKmh = 43.5;
 
             document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.remove('paused'));
-            playBeep(260 + Math.min(playerSpeed * 10, 480));
+            playBeep(260 + Math.min(playerKmh * 8, 480));
           }
         });
       });
 
+      // 未起跑前的熱身物理監聽
       function startIdlePhysics() {
         function idleLoop() {
           if (!isRunning) {
-            playerSpeed *= 0.94;
-            if (playerSpeed < 0.05) {
-              playerSpeed = 0;
+            playerKmh *= 0.95; // 阻力滑行自然減速
+            if (playerKmh < 0.2) {
+              playerKmh = 0;
               document.querySelectorAll('#p-leg-l, #p-leg-r').forEach(el => el.classList.add('paused'));
             }
-            const kmh = (playerSpeed * 8.5).toFixed(1);
-            document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-xs font-normal text-slate-400">km/h</span>`;
+            document.getElementById('speed-text').innerHTML = `${playerKmh.toFixed(1)} <span class="text-xs font-normal text-slate-400">km/h</span>`;
           }
           requestAnimationFrame(idleLoop);
         }
@@ -443,27 +455,28 @@
         const elapsed = (Date.now() - startTime) / 1000;
         document.getElementById('timer-text').innerText = elapsed.toFixed(2) + 's';
 
-        // 摩擦阻力衰減
-        playerSpeed *= 0.96;
-        if (playerSpeed < 0.05) playerSpeed = 0;
+        // 跑步運動慣性減速 (不搖手機時自然滑行減速)
+        playerKmh *= 0.975;
+        if (playerKmh < 0.2) playerKmh = 0;
 
-        // AI 選手配速曲線 (前段 1.15，後段加速衝刺)
-        const raceProgress = aiDist / TOTAL_DISTANCE;
-        const aiBase = 1.15 + raceProgress * 0.4;
-        aiSpeed = aiBase + Math.sin(Date.now() / 280) * 0.25;
+        // AI 選手配速模型 (模擬真實 400m 運動員：前段 24 km/h，衝刺期提升至 31 km/h)
+        const progress = Math.min(aiDist / TOTAL_DISTANCE, 1);
+        const aiTarget = 24.5 + progress * 6.5;
+        aiKmh = aiTarget + Math.sin(Date.now() / 300) * 1.8;
 
-        // 【位移比例調整】：前進步長微調為 0.10，使 400m 競賽持續約 20~30 秒
-        playerDist += playerSpeed * 0.10;
-        aiDist += aiSpeed * 0.10;
+        // 【精準距離換算】：km/h 轉換為每影格前進米數 (1 km/h = 1000m / 3600s ≈ 0.2778 m/s)
+        // 假設以 60 FPS 刷新：每影格前進 = (km/h / 3.6) * (1/60) ≈ km/h * 0.00463
+        // 為了讓比賽節奏適中（400m 約在 25~35 秒完成），乘上時間微調因子 0.0075
+        playerDist += (playerKmh / 3.6) * 0.045;
+        aiDist += (aiKmh / 3.6) * 0.045;
 
-        // 即時時速與剩餘距離更新
-        const kmh = (playerSpeed * 8.5).toFixed(1);
-        document.getElementById('speed-text').innerHTML = `${kmh} <span class="text-xs font-normal text-slate-400">km/h</span>`;
+        // 儀表板更新
+        document.getElementById('speed-text').innerHTML = `${playerKmh.toFixed(1)} <span class="text-xs font-normal text-slate-400">km/h</span>`;
         
         const remainMeters = Math.max(0, Math.round(TOTAL_DISTANCE - playerDist));
         document.getElementById('remain-dist-text').innerHTML = `${remainMeters} <span class="text-xs font-normal text-slate-400">m</span>`;
 
-        // 跑道進度換算 (最大視覺邊界 88%)
+        // 跑道視覺百分比 (最大 88%)
         const maxPercent = 88;
         const playerPercent = Math.min((playerDist / TOTAL_DISTANCE) * maxPercent, maxPercent);
         const aiPercent = Math.min((aiDist / TOTAL_DISTANCE) * maxPercent, maxPercent);
@@ -471,7 +484,7 @@
         document.getElementById('player-runner').style.left = `${playerPercent}%`;
         document.getElementById('ai-runner').style.left = `${aiPercent}%`;
 
-        // 衝線結算判定 (先抵達 400m 者勝)
+        // 終點判定
         if (playerDist >= TOTAL_DISTANCE || aiDist >= TOTAL_DISTANCE) {
           isRunning = false;
           document.querySelectorAll('.anim-leg-left, .anim-leg-right').forEach(el => el.classList.add('paused'));
@@ -494,8 +507,8 @@
         cancelAnimationFrame(gameLoopId);
         playerDist = 0;
         aiDist = 0;
-        playerSpeed = 0;
-        aiSpeed = 0;
+        playerKmh = 0;
+        aiKmh = 0;
         document.getElementById('player-runner').style.left = '16px';
         document.getElementById('ai-runner').style.left = '16px';
         document.getElementById('timer-text').innerText = '00.00s';
