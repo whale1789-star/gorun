@@ -3,147 +3,333 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山運動會- 400M </title>
+  <title>中山CSIC 400M </title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    @keyframes leg-swing-left {
-      0%, 100% { transform: rotate(35deg); }
-      50% { transform: rotate(-35deg); }
+    @keyframes cute-run-left {
+      0%, 100% { transform: translateY(0px) rotate(28deg); }
+      50% { transform: translateY(-4px) rotate(-28deg); }
     }
-    @keyframes leg-swing-right {
-      0%, 100% { transform: rotate(-35deg); }
-      50% { transform: rotate(35deg); }
+    @keyframes cute-run-right {
+      0%, 100% { transform: translateY(-4px) rotate(-28deg); }
+      50% { transform: translateY(0px) rotate(28deg); }
     }
-    .anim-leg-l { transform-origin: 30px 42px; animation: leg-swing-left 0.25s infinite ease-in-out; }
-    .anim-leg-r { transform-origin: 30px 42px; animation: leg-swing-right 0.25s infinite ease-in-out; }
+    @keyframes cute-bob {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-4px); }
+    }
+    .anim-leg-l { transform-origin: 30px 45px; animation: cute-run-left 0.22s infinite ease-in-out; }
+    .anim-leg-r { transform-origin: 45px 45px; animation: cute-run-right 0.22s infinite ease-in-out; }
+    .anim-body { animation: cute-bob 0.22s infinite ease-in-out; }
     .paused { animation-play-state: paused !important; }
   </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
+<body class="bg-slate-950 text-white min-h-screen flex flex-col font-sans select-none overflow-x-hidden">
 
   <!-- ==================== 電腦大螢幕端 (Host View) ==================== -->
-  <div id="host-view" class="hidden flex-1 flex-col p-4 md:p-6 max-w-7xl mx-auto w-full">
-    <header class="flex justify-between items-center mb-3 border-b border-slate-700 pb-2">
-      <div>
-        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃 中山運動會-400M 田徑錦標賽</h1>
-        <p class="text-xs text-slate-400">大螢幕端 · 精準終點壓線結算</p>
+  <div id="host-view" class="hidden flex-1 flex-col p-3 md:p-5 max-w-[1700px] mx-auto w-full transition-all duration-500">
+    <header class="flex justify-between items-center mb-2 border-b border-slate-800 pb-2">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl">🐾</span>
+        <div>
+          <h1 class="text-xl md:text-2xl font-black text-amber-400 tracking-wider">中山校運會 400M </h1>
+          <p class="text-[11px] text-slate-400">大螢幕端 · 支援 6 位玩家各自在手機輸入專屬名牌</p>
+        </div>
       </div>
       <div class="flex items-center gap-3">
-        <span id="player-count-badge" class="px-3 py-1 bg-slate-800 text-amber-400 border border-slate-700 rounded-full text-xs font-bold">
-          已加入選手: 0 / 4 人
+        <span id="player-count-badge" class="px-3 py-1 bg-slate-900 text-amber-400 border border-slate-700 rounded-full text-xs font-bold shadow-inner">
+          已加入選手: 0 / 6 人
         </span>
-        <button id="btn-start" class="px-6 py-2 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold rounded-xl text-sm shadow active:scale-95 transition">
-          起跑鳴槍
+        <button id="btn-start" class="px-7 py-2 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-slate-950 font-black rounded-xl text-sm shadow-lg active:scale-95 transition">
+          起跑鳴槍 🏁
         </button>
-        <button id="btn-reset" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl text-sm active:scale-95 transition">
+        <button id="btn-reset" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-sm active:scale-95 transition border border-slate-700">
           重置
         </button>
       </div>
     </header>
 
-    <!-- 配對 QR Code 與插槽 -->
-    <div id="lobby-panel" class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700 mb-4 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
+    <!-- 配對大廳與 QR Code (起跑時自動隱藏) -->
+    <div id="lobby-panel" class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 mb-2 flex flex-col md:flex-row items-center justify-between gap-5 shadow-2xl transition-all duration-500">
       <div class="flex flex-col items-center md:items-start text-center md:text-left">
-        <h2 class="text-lg font-bold text-white mb-1">拿起手機掃描 QR Code 參賽</h2>
-        <p class="text-slate-400 text-xs mb-3">若只有 1 人參賽，起跑時將自動指派電腦 AI 陪跑！</p>
+        <h2 class="text-base font-bold text-white mb-0.5">拿起手機掃描 QR Code 參賽 (支援 1~6 人)</h2>
+        <p class="text-slate-400 text-xs mb-2">選手可在手機上輸入專屬姓名！僅 1 人時將由電腦 AI 狐狸陪跑。</p>
         <div class="text-xs text-slate-400 font-mono">
           房間代碼：<span id="room-code-display" class="text-amber-400 font-bold">---</span>
         </div>
       </div>
-      <div id="qrcode" class="bg-white p-3 rounded-xl shadow inline-block"></div>
-      <div class="grid grid-cols-2 gap-2 w-full md:w-80">
-        <div id="slot-0" class="p-2.5 rounded-lg border border-red-500/30 bg-red-950/20 text-center text-xs text-red-400 font-bold">1P 紅隊: 等待加入...</div>
-        <div id="slot-1" class="p-2.5 rounded-lg border border-cyan-500/30 bg-cyan-950/20 text-center text-xs text-cyan-400 font-bold">2P 藍隊: 等待加入...</div>
-        <div id="slot-2" class="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 text-center text-xs text-emerald-400 font-bold">3P 綠隊: 等待加入...</div>
-        <div id="slot-3" class="p-2.5 rounded-lg border border-yellow-500/30 bg-yellow-950/20 text-center text-xs text-yellow-400 font-bold">4P 黃隊: 等待加入...</div>
+      <div id="qrcode" class="bg-white p-2 rounded-xl shadow-md inline-block"></div>
+      <!-- 6 人席位格 (3欄 x 2列) -->
+      <div class="grid grid-cols-3 gap-2 w-full md:w-[480px]">
+        <div id="slot-0" class="p-2 rounded-lg border border-red-500/30 bg-red-950/20 text-center text-xs text-red-400 font-bold">🐶 1P 柴柴</div>
+        <div id="slot-1" class="p-2 rounded-lg border border-cyan-500/30 bg-cyan-950/20 text-center text-xs text-cyan-400 font-bold">🐧 2P 企鵝</div>
+        <div id="slot-2" class="p-2 rounded-lg border border-emerald-500/30 bg-emerald-950/20 text-center text-xs text-emerald-400 font-bold">🐸 3P 呱呱</div>
+        <div id="slot-3" class="p-2 rounded-lg border border-yellow-500/30 bg-yellow-950/20 text-center text-xs text-yellow-400 font-bold">🐥 4P 咕咕</div>
+        <div id="slot-4" class="p-2 rounded-lg border border-purple-500/30 bg-purple-950/20 text-center text-xs text-purple-400 font-bold">🐱 5P 喵喵</div>
+        <div id="slot-5" class="p-2 rounded-lg border border-pink-500/30 bg-pink-950/20 text-center text-xs text-pink-400 font-bold">🐰 6P 兔兔</div>
       </div>
     </div>
 
     <!-- 狀態即時數據 -->
-    <div class="grid grid-cols-3 gap-3 text-center bg-slate-800/70 p-3 rounded-xl border border-slate-700 mb-4">
+    <div class="grid grid-cols-3 gap-3 text-center bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 mb-2 shadow">
       <div>
-        <div class="text-[11px] text-slate-400">比賽計時</div>
-        <div id="timer-text" class="text-2xl font-mono font-bold text-white">00.00s</div>
+        <div class="text-[10px] text-slate-400">比賽計時</div>
+        <div id="timer-text" class="text-xl font-mono font-bold text-white">00.00s</div>
       </div>
       <div>
-        <div class="text-[11px] text-slate-400">賽事狀態</div>
-        <div id="race-status" class="text-2xl font-bold text-amber-400">請掃碼加入</div>
+        <div class="text-[10px] text-slate-400">賽事狀態</div>
+        <div id="race-status" class="text-xl font-bold text-amber-400">請掃碼加入</div>
       </div>
       <div>
-        <div class="text-[11px] text-slate-400">領先時速</div>
-        <div id="top-speed-text" class="text-2xl font-mono font-bold text-emerald-400">0.0 <span class="text-xs font-normal text-slate-400">km/h</span></div>
+        <div class="text-[10px] text-slate-400">第一名領先時速</div>
+        <div id="top-speed-text" class="text-xl font-mono font-bold text-emerald-400">0.0 <span class="text-xs font-normal text-slate-400">km/h</span></div>
       </div>
     </div>
 
-    <!-- 田徑跑道區 (精確標線與終點線) -->
-    <div id="track-container" class="flex-1 bg-orange-800/90 rounded-2xl p-4 border-4 border-orange-950 shadow-inner flex flex-col justify-around gap-2 relative overflow-hidden min-h-[320px]">
-      <div id="tracks-wrapper" class="flex flex-col gap-3 relative z-10 w-full"></div>
+    <!-- 田徑跑道區 (最多 6 條獨立跑道) -->
+    <div id="track-container" class="flex-1 bg-gradient-to-b from-orange-900 to-amber-950 rounded-2xl p-3 md:p-5 border-4 border-amber-950 shadow-2xl flex flex-col justify-around gap-2 relative overflow-hidden min-h-[500px]">
+      <div id="tracks-wrapper" class="flex flex-col gap-2 relative z-10 w-full h-full justify-around"></div>
     </div>
 
     <!-- 結算頒獎排行榜 -->
-    <div id="leaderboard-modal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur flex items-center justify-center p-4 z-50">
-      <div class="bg-slate-800 border border-slate-700 p-6 rounded-2xl max-w-md w-full text-center shadow-2xl">
-        <h2 class="text-3xl font-black text-amber-400 mb-2">🏆 400M 比賽結算</h2>
-        <div id="podium-list" class="flex flex-col gap-2 my-5 text-sm font-semibold"></div>
-        <button id="btn-close-modal" class="w-full py-3 bg-amber-500 text-slate-900 font-bold rounded-xl active:scale-95 transition">
-          回到賽場
+    <div id="leaderboard-modal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
+      <div class="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-3xl max-w-lg w-full text-center shadow-2xl">
+        <h2 class="text-3xl font-black text-amber-400 mb-2">🏆 400M 萌寵錦標賽結算</h2>
+        <div id="podium-list" class="flex flex-col gap-2 my-5 text-sm font-semibold max-h-[380px] overflow-y-auto"></div>
+        <button id="btn-close-modal" class="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black rounded-xl active:scale-95 transition shadow-lg">
+          回到賽場 ➔
         </button>
       </div>
     </div>
   </div>
 
   <!-- ==================== 手機體感手把端 (Controller View) ==================== -->
-  <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-6 max-w-md mx-auto w-full text-center">
-    <div>
-      <div id="mobile-player-tag" class="text-sm font-black px-3 py-1 rounded-full inline-block bg-slate-800 text-amber-400 mb-2 border border-slate-700">
+  <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-5 max-w-md mx-auto w-full text-center">
+    <!-- 頂端選手與暱稱自訂區 -->
+    <div class="w-full">
+      <div id="mobile-player-tag" class="text-sm font-black px-4 py-1.5 rounded-full inline-block bg-slate-900 text-amber-400 mb-2 border border-slate-700 shadow">
         配對玩家中...
       </div>
-      <h1 class="text-2xl font-black text-white">狂搖手機全力衝刺！</h1>
-      <div id="mobile-conn-status" class="inline-block mt-2 px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold">
+      <div id="mobile-conn-status" class="block mx-auto max-w-[200px] px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold mb-3">
         正在連線主機...
+      </div>
+
+      <!-- 自訂選手暱稱輸入列 -->
+      <div id="name-input-box" class="flex items-center gap-2 bg-slate-900 p-2 rounded-xl border border-slate-800 shadow-inner">
+        <input id="input-nickname" type="text" maxlength="8" placeholder="輸入你的暱稱 (最多8字)" class="flex-1 bg-slate-950 text-white text-sm px-3 py-2 rounded-lg border border-slate-700 focus:outline-none focus:border-amber-400">
+        <button id="btn-update-name" class="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg active:scale-95 transition">
+          更新名牌
+        </button>
       </div>
     </div>
 
     <!-- iOS 授權區塊 -->
-    <div id="ios-permission-box" class="my-3 w-full p-4 bg-slate-800 border border-amber-500/40 rounded-2xl">
+    <div id="ios-permission-box" class="my-3 w-full p-4 bg-slate-900 border border-amber-500/40 rounded-2xl">
       <p class="text-xs mb-2 text-slate-300">iPhone / Safari 須啟用動作感測：</p>
-      <button id="btn-ios-auth" class="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold text-sm rounded-xl shadow active:scale-95 transition">
+      <button id="btn-ios-auth" class="w-full py-3.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm rounded-xl shadow active:scale-95 transition">
         點此啟用體感感測
       </button>
     </div>
 
     <!-- 體感動力儀表 -->
     <div id="motion-box" class="my-auto flex flex-col items-center justify-center">
-      <div class="relative w-44 h-44 rounded-full border-4 border-slate-700 flex items-center justify-center bg-slate-800 shadow-2xl">
+      <div class="relative w-44 h-44 rounded-full border-4 border-slate-800 flex items-center justify-center bg-slate-900 shadow-2xl">
         <div id="motion-fill" class="absolute inset-2 rounded-full bg-amber-500/20 border-2 border-amber-400 transition-transform duration-75 scale-50"></div>
         <div class="relative z-10">
           <div class="text-4xl font-black text-amber-400" id="motion-val">0</div>
-          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">擺臂強度</div>
+          <div class="text-xs text-slate-400 uppercase tracking-widest mt-1">擺臂爆發力</div>
         </div>
       </div>
-      <div id="debug-text" class="text-[11px] font-mono text-slate-400 mt-3">感測器：等待數據</div>
+      <div id="debug-text" class="text-[11px] font-mono text-slate-400 mt-2">感測器：等待數據</div>
       <div id="send-status" class="text-sm font-mono text-emerald-400 font-bold mt-1">累計送出: 0 次</div>
     </div>
 
     <!-- 備用按鈕 -->
-    <button id="btn-touch-boost" class="w-full py-5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
+    <button id="btn-touch-boost" class="w-full py-4.5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
       🔥 點擊衝刺 (測試送出)
     </button>
   </div>
 
   <!-- ==================== 前端核心邏輯 ==================== -->
   <script>
-    const TOTAL_DISTANCE = 400; // 400 米競速
+    const TOTAL_DISTANCE = 400;
 
+    // 6 位可愛 Q 版動物選手
     const PLAYER_CONFIG = [
-      { id: 0, name: '1P 紅隊', color: '#ef4444', textColor: 'text-red-400', bgBorder: 'border-red-500/50' },
-      { id: 1, name: '2P 藍隊', color: '#06b6d4', textColor: 'text-cyan-400', bgBorder: 'border-cyan-500/50' },
-      { id: 2, name: '3P 綠隊', color: '#10b981', textColor: 'text-emerald-400', bgBorder: 'border-emerald-500/50' },
-      { id: 3, name: '4P 黃隊', color: '#eab308', textColor: 'text-yellow-400', bgBorder: 'border-yellow-500/50' }
+      {
+        id: 0,
+        name: '1P 柴柴',
+        color: '#f97316',
+        textColor: 'text-orange-400',
+        bgBorder: 'border-orange-500/50',
+        svg: `
+          <g class="anim-body">
+            <polygon points="20,16 28,4 34,18" fill="#c2410c"/>
+            <polygon points="46,18 52,4 60,16" fill="#c2410c"/>
+            <ellipse cx="40" cy="24" rx="22" ry="16" fill="#ea580c"/>
+            <ellipse cx="33" cy="26" rx="9" ry="8" fill="#ffffff"/>
+            <ellipse cx="47" cy="26" rx="9" ry="8" fill="#ffffff"/>
+            <ellipse cx="32" cy="18" rx="2" ry="1.5" fill="#fef08a"/>
+            <ellipse cx="48" cy="18" rx="2" ry="1.5" fill="#fef08a"/>
+            <circle cx="34" cy="23" r="2.5" fill="#0f172a"/>
+            <circle cx="46" cy="23" r="2.5" fill="#0f172a"/>
+            <ellipse cx="40" cy="27" rx="3.5" ry="2.5" fill="#0f172a"/>
+            <path d="M 18,17 Q 40,11 62,17" stroke="#ef4444" stroke-width="4" stroke-linecap="round" fill="none"/>
+            <polygon points="61,16 69,14 65,22" fill="#ef4444"/>
+            <ellipse cx="40" cy="40" rx="14" ry="10" fill="#ea580c"/>
+            <ellipse cx="40" cy="42" rx="8" ry="7" fill="#ffffff"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="32" cy="49" rx="4" ry="7" fill="#c2410c"/>
+          <ellipse class="anim-leg-r paused" cx="48" cy="49" rx="4" ry="7" fill="#9a3412"/>
+        `
+      },
+      {
+        id: 1,
+        name: '2P 企鵝',
+        color: '#06b6d4',
+        textColor: 'text-cyan-400',
+        bgBorder: 'border-cyan-500/50',
+        svg: `
+          <g class="anim-body">
+            <ellipse cx="40" cy="30" rx="20" ry="22" fill="#0e7490"/>
+            <ellipse cx="40" cy="33" rx="13" ry="17" fill="#ffffff"/>
+            <circle cx="34" cy="24" r="2.8" fill="#0f172a"/>
+            <circle cx="46" cy="24" r="2.8" fill="#0f172a"/>
+            <polygon points="36,27 44,27 40,33" fill="#f97316"/>
+            <path d="M 24,32 Q 40,36 56,32" stroke="#f43f5e" stroke-width="5" stroke-linecap="round" fill="none"/>
+            <polygon points="53,32 58,42 51,40" fill="#f43f5e"/>
+            <ellipse cx="21" cy="33" rx="4" ry="9" transform="rotate(20 21 33)" fill="#155e75"/>
+            <ellipse cx="59" cy="33" rx="4" ry="9" transform="rotate(-20 59 33)" fill="#155e75"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="33" cy="51" rx="6" ry="3.5" fill="#ea580c"/>
+          <ellipse class="anim-leg-r paused" cx="47" cy="51" rx="6" ry="3.5" fill="#c2410c"/>
+        `
+      },
+      {
+        id: 2,
+        name: '3P 呱呱',
+        color: '#10b981',
+        textColor: 'text-emerald-400',
+        bgBorder: 'border-emerald-500/50',
+        svg: `
+          <g class="anim-body">
+            <circle cx="28" cy="16" r="8" fill="#10b981"/>
+            <circle cx="52" cy="16" r="8" fill="#10b981"/>
+            <circle cx="28" cy="16" r="5" fill="#ffffff"/>
+            <circle cx="52" cy="16" r="5" fill="#ffffff"/>
+            <circle cx="29" cy="16" r="3" fill="#0f172a"/>
+            <circle cx="51" cy="16" r="3" fill="#0f172a"/>
+            <ellipse cx="40" cy="29" rx="23" ry="16" fill="#10b981"/>
+            <ellipse cx="25" cy="31" rx="3.5" ry="2" fill="#f472b6"/>
+            <ellipse cx="55" cy="31" rx="3.5" ry="2" fill="#f472b6"/>
+            <path d="M 33,30 Q 40,36 47,30" stroke="#064e3b" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+            <ellipse cx="40" cy="41" rx="14" ry="9" fill="#059669"/>
+            <ellipse cx="40" cy="41" rx="9" ry="6" fill="#a7f3d0"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="31" cy="49" rx="5" ry="4" fill="#047857"/>
+          <ellipse class="anim-leg-r paused" cx="49" cy="49" rx="5" ry="4" fill="#065f46"/>
+        `
+      },
+      {
+        id: 3,
+        name: '4P 咕咕',
+        color: '#eab308',
+        textColor: 'text-yellow-400',
+        bgBorder: 'border-yellow-500/50',
+        svg: `
+          <g class="anim-body">
+            <path d="M 38,12 Q 40,5 44,11" stroke="#ca8a04" stroke-width="3" stroke-linecap="round" fill="none"/>
+            <circle cx="40" cy="28" r="19" fill="#facc15"/>
+            <circle cx="34" cy="25" r="2.5" fill="#0f172a"/>
+            <circle cx="46" cy="25" r="2.5" fill="#0f172a"/>
+            <polygon points="36,29 44,29 40,35" fill="#ea580c"/>
+            <circle cx="28" cy="30" r="3" fill="#fb923c" opacity="0.6"/>
+            <circle cx="52" cy="30" r="3" fill="#fb923c" opacity="0.6"/>
+            <ellipse cx="23" cy="31" rx="3" ry="6" transform="rotate(25 23 31)" fill="#eab308"/>
+            <ellipse cx="57" cy="31" rx="3" ry="6" transform="rotate(-25 57 31)" fill="#eab308"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="34" cy="48" rx="4" ry="4" fill="#d97706"/>
+          <ellipse class="anim-leg-r paused" cx="46" cy="48" rx="4" ry="4" fill="#b45309"/>
+        `
+      },
+      {
+        id: 4,
+        name: '5P 喵喵',
+        color: '#a855f7',
+        textColor: 'text-purple-400',
+        bgBorder: 'border-purple-500/50',
+        svg: `
+          <g class="anim-body">
+            <polygon points="22,17 28,4 34,18" fill="#7e22ce"/>
+            <polygon points="46,18 52,4 58,17" fill="#7e22ce"/>
+            <polygon points="25,16 28,8 31,17" fill="#f472b6"/>
+            <polygon points="49,17 52,8 55,16" fill="#f472b6"/>
+            <ellipse cx="40" cy="26" rx="21" ry="16" fill="#a855f7"/>
+            <circle cx="33" cy="23" r="2.5" fill="#0f172a"/>
+            <circle cx="47" cy="23" r="2.5" fill="#0f172a"/>
+            <polygon points="38,27 42,27 40,30" fill="#f472b6"/>
+            <line x1="20" y1="26" x2="30" y2="28" stroke="#ffffff" stroke-width="1.5"/>
+            <line x1="20" y1="30" x2="30" y2="30" stroke="#ffffff" stroke-width="1.5"/>
+            <line x1="50" y1="28" x2="60" y2="26" stroke="#ffffff" stroke-width="1.5"/>
+            <line x1="50" y1="30" x2="60" y2="30" stroke="#ffffff" stroke-width="1.5"/>
+            <ellipse cx="40" cy="41" rx="13" ry="9" fill="#9333ea"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="33" cy="49" rx="4" ry="6" fill="#7e22ce"/>
+          <ellipse class="anim-leg-r paused" cx="47" cy="49" rx="4" ry="6" fill="#6b21a8"/>
+        `
+      },
+      {
+        id: 5,
+        name: '6P 兔兔',
+        color: '#ec4899',
+        textColor: 'text-pink-400',
+        bgBorder: 'border-pink-500/50',
+        svg: `
+          <g class="anim-body">
+            <ellipse cx="32" cy="11" rx="4" ry="12" transform="rotate(-10 32 11)" fill="#f472b6"/>
+            <ellipse cx="48" cy="11" rx="4" ry="12" transform="rotate(10 48 11)" fill="#f472b6"/>
+            <ellipse cx="32" cy="11" rx="2" ry="8" transform="rotate(-10 32 11)" fill="#ffffff"/>
+            <ellipse cx="48" cy="11" rx="2" ry="8" transform="rotate(10 48 11)" fill="#ffffff"/>
+            <ellipse cx="40" cy="28" rx="20" ry="15" fill="#fbcfe8"/>
+            <circle cx="34" cy="26" r="2.5" fill="#0f172a"/>
+            <circle cx="46" cy="26" r="2.5" fill="#0f172a"/>
+            <polygon points="38,29 42,29 40,32" fill="#ec4899"/>
+            <circle cx="27" cy="30" r="3" fill="#f43f5e" opacity="0.4"/>
+            <circle cx="53" cy="30" r="3" fill="#f43f5e" opacity="0.4"/>
+            <ellipse cx="40" cy="41" rx="13" ry="9" fill="#f472b6"/>
+          </g>
+          <ellipse class="anim-leg-l paused" cx="33" cy="49" rx="5" ry="5" fill="#db2777"/>
+          <ellipse class="anim-leg-r paused" cx="47" cy="49" rx="5" ry="5" fill="#be185d"/>
+        `
+      }
     ];
+
+    const AI_CONFIG = {
+      name: '2P 電腦狐狸 (AI)',
+      color: '#38bdf8',
+      textColor: 'text-sky-400',
+      svg: `
+        <g class="anim-body">
+          <polygon points="20,16 26,4 34,17" fill="#0284c7"/>
+          <polygon points="46,17 54,4 60,16" fill="#0284c7"/>
+          <polygon points="24,14 27,8 31,16" fill="#ffffff"/>
+          <polygon points="49,16 53,8 56,14" fill="#ffffff"/>
+          <ellipse cx="40" cy="25" rx="20" ry="15" fill="#38bdf8"/>
+          <polygon points="22,25 35,35 27,35" fill="#ffffff"/>
+          <polygon points="58,25 45,35 53,35" fill="#ffffff"/>
+          <ellipse cx="32" cy="23" rx="2.5" ry="1.5" transform="rotate(-15 32 23)" fill="#0f172a"/>
+          <ellipse cx="48" cy="23" rx="2.5" ry="1.5" transform="rotate(15 48 23)" fill="#0f172a"/>
+          <circle cx="40" cy="28" r="2.5" fill="#0f172a"/>
+          <ellipse cx="40" cy="40" rx="13" ry="10" fill="#0284c7"/>
+          <ellipse cx="23" cy="43" rx="6" ry="4" fill="#ffffff"/>
+        </g>
+        <ellipse class="anim-leg-l paused" cx="33" cy="49" rx="4" ry="6" fill="#0369a1"/>
+        <ellipse class="anim-leg-r paused" cx="47" cy="49" rx="4" ry="6" fill="#075985"/>
+      `
+    };
 
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
@@ -207,15 +393,31 @@
             tagEl.style.color = pInfo.color;
             tagEl.style.borderColor = pInfo.color;
 
+            // 預設輸入框填入動物名
+            document.getElementById('input-nickname').value = pInfo.name.split(' ')[1] || pInfo.name;
+
             const statusEl = document.getElementById('mobile-conn-status');
-            statusEl.innerText = '✅ 就位成功！等候主機鳴槍';
-            statusEl.className = 'inline-block mt-2 px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold';
+            statusEl.innerText = '✅ 就位成功！可輸入名牌';
+            statusEl.className = 'block mx-auto max-w-[200px] px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold mb-3';
 
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           } else if (data && data.type === 'ROOM_FULL') {
-            alert('該房間已額滿（最多 4 位選手）！');
+            alert('該房間已額滿（最多 6 位選手）！');
           }
         });
+      });
+
+      // 自訂選手暱稱發送
+      document.getElementById('btn-update-name').addEventListener('click', () => {
+        const customName = document.getElementById('input-nickname').value.trim();
+        if (!customName) return;
+
+        if (conn && conn.open && assignedPlayerId !== null) {
+          conn.send({ type: 'SET_NAME', name: customName });
+          const tagEl = document.getElementById('mobile-player-tag');
+          tagEl.innerText = `${assignedPlayerId + 1}P ${customName}`;
+          alert(`已成功將選手名牌改為：${customName}`);
+        }
       });
 
       function sendSpeedBoost(power) {
@@ -310,9 +512,9 @@
         const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
         new QRCode(document.getElementById('qrcode'), {
           text: joinUrl,
-          width: 130,
-          height: 130,
-          colorDark: "#0f172a",
+          width: 110,
+          height: 110,
+          colorDark: "#020617",
           colorLight: "#ffffff"
         });
       });
@@ -323,8 +525,9 @@
         conn.on('data', (data) => {
           if (!data) return;
 
+          // 加入房間
           if (data.type === 'JOIN') {
-            if (players.length >= 4) {
+            if (players.length >= 6) {
               conn.send({ type: 'ROOM_FULL' });
               return;
             }
@@ -337,6 +540,7 @@
               peerConn: conn,
               name: pInfo.name,
               color: pInfo.color,
+              svg: pInfo.svg,
               isAI: false,
               dist: 0,
               kmh: 0,
@@ -347,16 +551,31 @@
             players.push(playerObj);
             conn.send({ type: 'ASSIGN_SLOT', slot: slotIndex });
 
-            document.getElementById('player-count-badge').innerText = `已加入選手: ${players.filter(p => !p.isAI).length} / 4 人`;
+            document.getElementById('player-count-badge').innerText = `已加入選手: ${players.filter(p => !p.isAI).length} / 6 人`;
             const slotEl = document.getElementById(`slot-${slotIndex}`);
-            slotEl.innerText = `✅ ${pInfo.name} 已就位`;
-            slotEl.className = `p-2.5 rounded-lg border ${pInfo.bgBorder} bg-slate-800 text-center text-xs font-bold text-white`;
+            slotEl.innerText = `✅ ${pInfo.name}`;
+            slotEl.className = `p-2 rounded-lg border ${pInfo.bgBorder} bg-slate-800 text-center text-xs font-bold text-white shadow-md`;
 
-            document.getElementById('race-status').innerText = `已有 ${players.length} 人，可隨時起跑！`;
+            document.getElementById('race-status').innerText = `已有 ${players.length} 人，可起跑！`;
 
             renderTracks();
           }
 
+          // 選手修改暱稱
+          if (data.type === 'SET_NAME' && playerObj) {
+            const rawName = String(data.name).trim().substring(0, 8);
+            playerObj.name = `${playerObj.slot + 1}P ${rawName}`;
+            
+            // 更新大廳按鈕名牌
+            const slotEl = document.getElementById(`slot-${playerObj.slot}`);
+            if (slotEl) slotEl.innerText = `✅ ${playerObj.name}`;
+
+            // 更新跑道文字
+            const nameEl = document.getElementById(`name-tag-${playerObj.slot}`);
+            if (nameEl) nameEl.innerText = playerObj.name;
+          }
+
+          // 搖晃加速
           if (data.type === 'SHAKE' && playerObj && !playerObj.finished) {
             totalReceived++;
 
@@ -371,11 +590,9 @@
             playerObj.kmh += boost;
             if (playerObj.kmh > 43.5) playerObj.kmh = 43.5;
 
-            const legL = document.getElementById(`leg-l-${playerObj.slot}`);
-            const legR = document.getElementById(`leg-r-${playerObj.slot}`);
-            if (legL && legR) {
-              legL.classList.remove('paused');
-              legR.classList.remove('paused');
+            const runnerEl = document.getElementById(`runner-${playerObj.slot}`);
+            if (runnerEl) {
+              runnerEl.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.remove('paused'));
             }
 
             playBeep(260 + Math.min(playerObj.kmh * 8, 480));
@@ -383,42 +600,39 @@
         });
       });
 
-      // 跑道渲染：終點線固定在右側 32px，標記 100m/200m/300m
       function renderTracks() {
         const wrapper = document.getElementById('tracks-wrapper');
         wrapper.innerHTML = '';
 
         players.forEach(p => {
           const trackHtml = `
-            <div class="relative bg-orange-700/60 rounded-xl h-20 flex items-center px-4 border border-orange-600/40 overflow-hidden">
-              <!-- 跑道距離刻度標記 -->
-              <div class="absolute inset-0 flex justify-between px-10 pointer-events-none opacity-20">
-                <div class="border-r border-dashed border-white h-full relative"><span class="absolute top-1 -left-3 text-[9px] text-white">100m</span></div>
-                <div class="border-r border-dashed border-white h-full relative"><span class="absolute top-1 -left-3 text-[9px] text-white">200m</span></div>
-                <div class="border-r border-dashed border-white h-full relative"><span class="absolute top-1 -left-3 text-[9px] text-white">300m</span></div>
-                <div class="border-r border-dashed border-white h-full relative"></div>
+            <div class="relative bg-orange-800/70 rounded-xl h-20 md:h-24 flex items-center px-4 border-2 border-orange-700/50 overflow-hidden shadow-inner">
+              <div class="absolute inset-0 flex justify-between px-12 pointer-events-none opacity-25">
+                <div class="border-r-2 border-dashed border-white h-full relative"><span class="absolute top-1 -left-4 text-[9px] font-bold text-white bg-slate-900/60 px-1 rounded">100m</span></div>
+                <div class="border-r-2 border-dashed border-white h-full relative"><span class="absolute top-1 -left-4 text-[9px] font-bold text-white bg-slate-900/60 px-1 rounded">200m</span></div>
+                <div class="border-r-2 border-dashed border-white h-full relative"><span class="absolute top-1 -left-4 text-[9px] font-bold text-white bg-slate-900/60 px-1 rounded">300m</span></div>
+                <div class="border-r-2 border-dashed border-white h-full relative"></div>
               </div>
 
-              <!-- 資訊文字 -->
-              <div class="absolute left-3 top-1 text-[11px] font-bold z-20" style="color: ${p.color}">
-                ${p.name} · <span id="dist-tag-${p.slot}">400m</span> · <span id="speed-tag-${p.slot}">0.0 km/h</span>
+              <!-- 自訂暱稱標籤 -->
+              <div class="absolute left-3 top-1 text-[11px] md:text-xs font-black z-20 flex items-center gap-2 bg-slate-950/70 px-2.5 py-0.5 rounded-full border border-slate-700/60" style="color: ${p.color}">
+                <span id="name-tag-${p.slot}">${p.name}</span>
+                <span class="text-white/60">·</span>
+                <span id="dist-tag-${p.slot}" class="font-mono text-cyan-300">400m</span>
+                <span class="text-white/60">·</span>
+                <span id="speed-tag-${p.slot}" class="font-mono text-amber-300">0.0 km/h</span>
               </div>
 
-              <!-- 小跑者 (起點 left: 16px) -->
-              <div id="runner-${p.slot}" class="absolute left-4 transition-all duration-75 flex flex-col items-center z-10" style="left: 16px;">
-                <svg class="w-10 h-10" viewBox="0 0 60 60" fill="${p.color}">
-                  <circle cx="30" cy="12" r="7" />
-                  <rect x="25" y="20" width="10" height="22" rx="3" />
-                  <rect id="leg-l-${p.slot}" class="anim-leg-l paused" x="24" y="38" width="5" height="18" rx="2" fill="${p.color}" />
-                  <rect id="leg-r-${p.slot}" class="anim-leg-r paused" x="31" y="38" width="5" height="18" rx="2" fill="#ffffff" />
+              <div id="runner-${p.slot}" class="absolute transition-all duration-75 flex flex-col items-center z-10 cursor-pointer drop-shadow-xl" style="left: 16px;">
+                <svg class="w-14 h-14 md:w-16 md:h-16" viewBox="0 0 80 60">
+                  ${p.svg}
                 </svg>
               </div>
 
-              <!-- 400M 終點紅白線 (固定於右側 32px) -->
-              <div class="absolute right-8 top-0 bottom-0 w-3 bg-white flex flex-col justify-around z-0 shadow-md">
-                <div class="h-2 bg-red-600"></div>
-                <div class="h-2 bg-red-600"></div>
-                <div class="h-2 bg-red-600"></div>
+              <div class="absolute right-8 top-0 bottom-0 w-3.5 bg-white flex flex-col justify-around z-0 shadow-lg border-l border-r border-slate-800">
+                <div class="h-2.5 bg-red-600"></div>
+                <div class="h-2.5 bg-red-600"></div>
+                <div class="h-2.5 bg-red-600"></div>
               </div>
             </div>
           `;
@@ -433,9 +647,8 @@
               p.kmh *= 0.95;
               if (p.kmh < 0.2) {
                 p.kmh = 0;
-                const l = document.getElementById(`leg-l-${p.slot}`);
-                const r = document.getElementById(`leg-r-${p.slot}`);
-                if (l && r) { l.classList.add('paused'); r.classList.add('paused'); }
+                const r = document.getElementById(`runner-${p.slot}`);
+                if (r) r.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.add('paused'));
               }
               const spEl = document.getElementById(`speed-tag-${p.slot}`);
               if (spEl) spEl.innerText = `${p.kmh.toFixed(1)} km/h`;
@@ -446,24 +659,23 @@
       }
       requestAnimationFrame(startIdlePhysics);
 
-      // 起跑按鈕
       document.getElementById('btn-start').addEventListener('click', () => {
         if (isRunning) return;
 
         const realPlayers = players.filter(p => !p.isAI);
         if (realPlayers.length === 0) {
-          alert('請至少讓 1 位真實玩家掃碼加入！');
+          alert('請先讓至少 1 位選手掃描 QR Code 參賽！');
           return;
         }
 
-        // 若僅有 1 位真實玩家，自動補位 AI 對手
         if (realPlayers.length === 1) {
           players = realPlayers;
           const aiPlayer = {
             slot: 1,
             peerConn: null,
-            name: '2P 電腦選手 (AI)',
-            color: '#06b6d4',
+            name: AI_CONFIG.name,
+            color: AI_CONFIG.color,
+            svg: AI_CONFIG.svg,
             isAI: true,
             dist: 0,
             kmh: 0,
@@ -477,18 +689,22 @@
           renderTracks();
         }
 
+        document.getElementById('lobby-panel').classList.add('hidden');
+
         resetRaceVariables();
         startCountdown();
       });
 
       document.getElementById('btn-reset').addEventListener('click', () => {
         resetRaceVariables();
+        document.getElementById('lobby-panel').classList.remove('hidden');
         document.getElementById('race-status').innerText = '準備起跑';
         document.getElementById('race-status').className = 'text-2xl font-bold text-amber-400';
       });
 
       document.getElementById('btn-close-modal').addEventListener('click', () => {
         document.getElementById('leaderboard-modal').classList.add('hidden');
+        document.getElementById('lobby-panel').classList.remove('hidden');
       });
 
       function startCountdown() {
@@ -509,7 +725,7 @@
             playBeep(880, 'square', 0.25);
             isRunning = true;
             startTime = Date.now();
-            document.querySelectorAll('.anim-leg-l, .anim-leg-r').forEach(el => el.classList.remove('paused'));
+            document.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.remove('paused'));
             gameLoopId = requestAnimationFrame(gameLoop);
           }
         }, 1000);
@@ -527,19 +743,16 @@
         players.forEach(p => {
           if (!p.finished) {
             if (p.isAI) {
-              // AI 配速調整：約 22~28 km/h，穩定推進
               const progress = Math.min(p.dist / TOTAL_DISTANCE, 1);
-              const aiTarget = 22.0 + progress * 5.0;
-              p.kmh = aiTarget + Math.sin(Date.now() / 300) * 1.5;
+              const aiTarget = 22.0 + progress * 5.5;
+              p.kmh = aiTarget + Math.sin(Date.now() / 280) * 1.5;
             } else {
               p.kmh *= 0.975;
               if (p.kmh < 0.2) p.kmh = 0;
             }
 
-            // 前進位移換算 (400 米約需 35~45 秒)
             p.dist += (p.kmh / 3.6) * 0.035;
 
-            // 【終點精確判定】：跑滿 400 米才判定衝線
             if (p.dist >= TOTAL_DISTANCE) {
               p.dist = TOTAL_DISTANCE;
               p.finished = true;
@@ -550,37 +763,30 @@
 
           if (p.kmh > maxSpeed) maxSpeed = p.kmh;
 
-          // 更新跑道看板文字
           const remainM = Math.max(0, Math.round(TOTAL_DISTANCE - p.dist));
           const distTag = document.getElementById(`dist-tag-${p.slot}`);
           const speedTag = document.getElementById(`speed-tag-${p.slot}`);
           if (distTag) distTag.innerText = p.finished ? `完賽 (${p.finishTime}s)` : `${remainM}m`;
           if (speedTag) speedTag.innerText = `${p.kmh.toFixed(1)} km/h`;
 
-          // 【精準視覺對齊】：
-          // 起點是 16px，終點線位於距離右側 32px
-          // 因此最大可移動寬度為 (跑道總寬 - 70px)
           const runnerEl = document.getElementById(`runner-${p.slot}`);
           if (runnerEl) {
             const ratio = Math.min(p.dist / TOTAL_DISTANCE, 1.0);
-            // 用 CSS calc 精準貼齊終點紅白線
-            runnerEl.style.left = `calc(16px + (100% - 70px) * ${ratio})`;
+            runnerEl.style.left = `calc(16px + (100% - 80px) * ${ratio})`;
           }
         });
 
         document.getElementById('top-speed-text').innerHTML = `${maxSpeed.toFixed(1)} <span class="text-xs font-normal text-slate-400">km/h</span>`;
 
-        // 【衝線結束邏輯】：有人達到 400m 壓線時，判定結束
         if (anyWinner) {
           isRunning = false;
-          // 將未衝線選手紀錄當前成績
           players.forEach(p => {
             if (!p.finished) {
               p.finishTime = elapsed.toFixed(2);
               p.finished = true;
             }
           });
-          document.querySelectorAll('.anim-leg-l, .anim-leg-r').forEach(el => el.classList.add('paused'));
+          document.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.add('paused'));
           showLeaderboard();
           return;
         }
@@ -593,20 +799,22 @@
         const list = document.getElementById('podium-list');
         list.innerHTML = '';
 
-        // 依完賽秒數與跑動距離排序
         const ranked = [...players].sort((a, b) => b.dist - a.dist || (parseFloat(a.finishTime) || 999) - (parseFloat(b.finishTime) || 999));
-        const medals = ['🥇 冠軍', '🥈 亞軍', '🥉 季軍', '殿軍'];
+        const medals = ['🥇 冠軍', '🥈 亞軍', '🥉 季軍', '4th 殿軍', '5th 第五名', '6th 第六名'];
 
         ranked.forEach((p, idx) => {
           list.innerHTML += `
-            <div class="flex justify-between items-center bg-slate-700/80 p-3 rounded-xl border border-slate-600">
-              <span class="font-bold">${medals[idx] || idx + 1}：<span style="color: ${p.color}">${p.name}</span></span>
-              <span class="font-mono text-amber-400">${p.finishTime} 秒 (${Math.round(p.dist)}m)</span>
+            <div class="flex justify-between items-center bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700 shadow">
+              <span class="font-bold flex items-center gap-2">
+                <span>${medals[idx] || idx + 1}</span>
+                <span style="color: ${p.color}">${p.name}</span>
+              </span>
+              <span class="font-mono text-amber-400 font-bold">${p.finishTime} 秒 (${Math.round(p.dist)}m)</span>
             </div>
           `;
         });
 
-        confetti({ particleCount: 180, spread: 100, origin: { y: 0.6 } });
+        confetti({ particleCount: 220, spread: 110, origin: { y: 0.6 } });
         modal.classList.remove('hidden');
       }
 
