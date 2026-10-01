@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山盃體感賽跑 400M </title>
+  <title>CSIC體感賽跑 400M</title>
   <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -28,8 +28,8 @@
   <div id="host-view" class="hidden flex-1 flex-col p-4 md:p-6 max-w-7xl mx-auto w-full">
     <header class="flex justify-between items-center mb-3 border-b border-slate-700 pb-2">
       <div>
-        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃CSIC 400M 田徑錦標賽 (最多4人對決)</h1>
-        <p class="text-xs text-slate-400">大螢幕端 · 即時綁定直通版</p>
+        <h1 class="text-2xl md:text-3xl font-black text-amber-400 tracking-wider">🏃CSIC 400M 田徑錦標賽</h1>
+        <p class="text-xs text-slate-400">大螢幕端 · 單人自動啟動 AI 對手 / 多人全真人對決</p>
       </div>
       <div class="flex items-center gap-3">
         <span id="player-count-badge" class="px-3 py-1 bg-slate-800 text-amber-400 border border-slate-700 rounded-full text-xs font-bold">
@@ -48,7 +48,7 @@
     <div id="lobby-panel" class="bg-slate-800/90 rounded-2xl p-5 border border-slate-700 mb-4 flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl">
       <div class="flex flex-col items-center md:items-start text-center md:text-left">
         <h2 class="text-lg font-bold text-white mb-1">拿起手機掃描 QR Code 參賽</h2>
-        <p class="text-slate-400 text-xs mb-3">多位選手可掃同一個 QR Code，手機一搖大螢幕即刻前進！</p>
+        <p class="text-slate-400 text-xs mb-3">若只有 1 人參賽，起跑時將自動指派「電腦 AI」同場競爭！</p>
         <div class="text-xs text-slate-400 font-mono">
           房間代碼：<span id="room-code-display" class="text-amber-400 font-bold">---</span>
         </div>
@@ -73,8 +73,8 @@
         <div id="race-status" class="text-2xl font-bold text-amber-400">請掃碼加入</div>
       </div>
       <div>
-        <div class="text-[11px] text-slate-400">總接收訊號</div>
-        <div id="total-packet-text" class="text-2xl font-mono font-bold text-emerald-400">0</div>
+        <div class="text-[11px] text-slate-400">領先時速</div>
+        <div id="top-speed-text" class="text-2xl font-mono font-bold text-emerald-400">0.0 <span class="text-xs font-normal text-slate-400">km/h</span></div>
       </div>
     </div>
 
@@ -141,7 +141,7 @@
     </button>
   </div>
 
-  <!-- ==================== 前端多玩家核心邏輯 ==================== -->
+  <!-- ==================== 前端核心邏輯 ==================== -->
   <script>
     const TOTAL_DISTANCE = 400;
 
@@ -230,7 +230,6 @@
         document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
 
         if (conn && conn.open) {
-          // 直接送出 SHAKE 訊號
           conn.send({ type: 'SHAKE', power: Number(power) || 15 });
         }
       }
@@ -298,7 +297,7 @@
       document.getElementById('host-view').classList.remove('hidden');
       document.getElementById('host-view').classList.add('flex');
 
-      const players = [];
+      let players = [];
       let totalReceived = 0;
 
       const roomId = 'sprint' + Math.floor(1000 + Math.random() * 9000);
@@ -325,14 +324,14 @@
         });
       });
 
-      // 【核心修復】：連線與玩家實體直接一對一綁定 (Direct Connection Binding)
+      // 連線與玩家實體直接一對一綁定
       peer.on('connection', (conn) => {
         let playerObj = null;
 
         conn.on('data', (data) => {
           if (!data) return;
 
-          // 手機發出加入請求
+          // 手機加入
           if (data.type === 'JOIN') {
             if (players.length >= 4) {
               conn.send({ type: 'ROOM_FULL' });
@@ -347,6 +346,7 @@
               peerConn: conn,
               name: pInfo.name,
               color: pInfo.color,
+              isAI: false,
               dist: 0,
               kmh: 0,
               finished: false,
@@ -356,7 +356,7 @@
             players.push(playerObj);
             conn.send({ type: 'ASSIGN_SLOT', slot: slotIndex });
 
-            document.getElementById('player-count-badge').innerText = `已加入選手: ${players.length} / 4 人`;
+            document.getElementById('player-count-badge').innerText = `已加入選手: ${players.filter(p => !p.isAI).length} / 4 人`;
             const slotEl = document.getElementById(`slot-${slotIndex}`);
             slotEl.innerText = `✅ ${pInfo.name} 已就位`;
             slotEl.className = `p-2.5 rounded-lg border ${pInfo.bgBorder} bg-slate-800 text-center text-xs font-bold text-white`;
@@ -369,7 +369,6 @@
           // 收到該連線發送的 SHAKE 訊號
           if (data.type === 'SHAKE' && playerObj && !playerObj.finished) {
             totalReceived++;
-            document.getElementById('total-packet-text').innerText = totalReceived;
 
             const rawPower = Number(data.power) || 12;
             let boost = Math.min(rawPower * 0.22, 4.0);
@@ -382,7 +381,7 @@
             playerObj.kmh += boost;
             if (playerObj.kmh > 43.5) playerObj.kmh = 43.5;
 
-            // 腿部擺動動畫解除暫停
+            // 雙腿擺動動畫
             const legL = document.getElementById(`leg-l-${playerObj.slot}`);
             const legR = document.getElementById(`leg-r-${playerObj.slot}`);
             if (legL && legR) {
@@ -427,28 +426,66 @@
       function startIdlePhysics() {
         if (!isRunning) {
           players.forEach(p => {
-            p.kmh *= 0.95;
-            if (p.kmh < 0.2) {
-              p.kmh = 0;
-              const l = document.getElementById(`leg-l-${p.slot}`);
-              const r = document.getElementById(`leg-r-${p.slot}`);
-              if (l && r) { l.classList.add('paused'); r.classList.add('paused'); }
+            if (!p.isAI) {
+              p.kmh *= 0.95;
+              if (p.kmh < 0.2) {
+                p.kmh = 0;
+                const l = document.getElementById(`leg-l-${p.slot}`);
+                const r = document.getElementById(`leg-r-${p.slot}`);
+                if (l && r) { l.classList.add('paused'); r.classList.add('paused'); }
+              }
+              const spEl = document.getElementById(`speed-tag-${p.slot}`);
+              if (spEl) spEl.innerText = `${p.kmh.toFixed(1)} km/h`;
             }
-            const spEl = document.getElementById(`speed-tag-${p.slot}`);
-            if (spEl) spEl.innerText = `${p.kmh.toFixed(1)} km/h`;
           });
         }
         requestAnimationFrame(startIdlePhysics);
       }
       requestAnimationFrame(startIdlePhysics);
 
+      // 起跑按鈕
       document.getElementById('btn-start').addEventListener('click', () => {
-        if (isRunning || players.length === 0) return;
-        resetRace();
+        if (isRunning) return;
+
+        const realPlayers = players.filter(p => !p.isAI);
+        if (realPlayers.length === 0) {
+          alert('請至少讓 1 位真實玩家掃碼加入！');
+          return;
+        }
+
+        // 【關鍵核心】：若僅有 1 位真實玩家，自動補位 AI 對手於 2 跑道
+        if (realPlayers.length === 1) {
+          // 清除可能殘留的舊 AI
+          players = realPlayers;
+          const aiPlayer = {
+            slot: 1,
+            peerConn: null,
+            name: '2P 電腦選手 (AI)',
+            color: '#06b6d4',
+            isAI: true,
+            dist: 0,
+            kmh: 0,
+            finished: false,
+            finishTime: null
+          };
+          players.push(aiPlayer);
+          renderTracks();
+        } else {
+          // 若有 2 人以上，確保不保留 AI
+          players = realPlayers;
+          renderTracks();
+        }
+
+        resetRaceVariables();
         startCountdown();
       });
 
-      document.getElementById('btn-reset').addEventListener('click', resetRace);
+      document.getElementById('btn-reset').addEventListener('click', () => {
+        resetRaceVariables();
+        document.getElementById('race-status').innerText = '準備起跑';
+        document.getElementById('race-status').className = 'text-2xl font-bold text-amber-400';
+      });
+
       document.getElementById('btn-close-modal').addEventListener('click', () => {
         document.getElementById('leaderboard-modal').classList.add('hidden');
       });
@@ -483,15 +520,23 @@
         const elapsed = (Date.now() - startTime) / 1000;
         document.getElementById('timer-text').innerText = elapsed.toFixed(2) + 's';
 
+        let maxSpeed = 0;
         let finishedCount = 0;
 
         players.forEach(p => {
           if (!p.finished) {
-            // 自然滑行減速
-            p.kmh *= 0.975;
-            if (p.kmh < 0.2) p.kmh = 0;
+            if (p.isAI) {
+              // AI 選手配速模型 (模擬真實 400m 運動員：24 ~ 32 km/h)
+              const progress = Math.min(p.dist / TOTAL_DISTANCE, 1);
+              const aiTarget = 24.5 + progress * 6.5;
+              p.kmh = aiTarget + Math.sin(Date.now() / 280) * 1.8;
+            } else {
+              // 真人選手自然滑行減速
+              p.kmh *= 0.975;
+              if (p.kmh < 0.2) p.kmh = 0;
+            }
 
-            // 【前進位移計算】：km/h 換算為位移米數
+            // 前進位移換算
             p.dist += (p.kmh / 3.6) * 0.045;
 
             if (p.dist >= TOTAL_DISTANCE) {
@@ -502,20 +547,24 @@
           }
 
           if (p.finished) finishedCount++;
+          if (p.kmh > maxSpeed) maxSpeed = p.kmh;
 
+          // 更新單道看板資訊
           const remainM = Math.max(0, Math.round(TOTAL_DISTANCE - p.dist));
           const distTag = document.getElementById(`dist-tag-${p.slot}`);
           const speedTag = document.getElementById(`speed-tag-${p.slot}`);
           if (distTag) distTag.innerText = p.finished ? `完賽 (${p.finishTime}s)` : `${remainM}m`;
           if (speedTag) speedTag.innerText = `${p.kmh.toFixed(1)} km/h`;
 
-          // 更新小跑者畫面位置
+          // 移動跑者位置
           const runnerEl = document.getElementById(`runner-${p.slot}`);
           if (runnerEl) {
             const percent = Math.min((p.dist / TOTAL_DISTANCE) * 88, 88);
             runnerEl.style.left = `${percent}%`;
           }
         });
+
+        document.getElementById('top-speed-text').innerHTML = `${maxSpeed.toFixed(1)} <span class="text-xs font-normal text-slate-400">km/h</span>`;
 
         // 全員衝線判定
         if (finishedCount === players.length && players.length > 0) {
@@ -532,6 +581,7 @@
         const list = document.getElementById('podium-list');
         list.innerHTML = '';
 
+        // 依完賽秒數排序
         const ranked = [...players].sort((a, b) => (parseFloat(a.finishTime) || 999) - (parseFloat(b.finishTime) || 999));
         const medals = ['🥇 冠軍', '🥈 亞軍', '🥉 季軍', '殿軍'];
 
@@ -548,12 +598,11 @@
         modal.classList.remove('hidden');
       }
 
-      function resetRace() {
+      function resetRaceVariables() {
         isRunning = false;
         cancelAnimationFrame(gameLoopId);
         document.getElementById('timer-text').innerText = '00.00s';
-        document.getElementById('race-status').innerText = '準備起跑';
-        document.getElementById('race-status').className = 'text-2xl font-bold text-amber-400';
+        document.getElementById('top-speed-text').innerHTML = `0.0 <span class="text-xs font-normal text-slate-400">km/h</span>`;
 
         players.forEach(p => {
           p.dist = 0;
