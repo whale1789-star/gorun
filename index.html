@@ -35,7 +35,7 @@
       <div class="flex items-center gap-3">
         <span class="text-3xl">🐾</span>
         <div>
-          <h1 class="text-xl md:text-2xl font-black text-amber-400 tracking-wider">中山校運會 400M </h1>
+          <h1 class="text-xl md:text-2xl font-black text-amber-400 tracking-wider">中山校運會 400M</h1>
           <p class="text-[11px] text-slate-400">大螢幕端 · 支援 6 位玩家各自在手機輸入專屬名牌</p>
         </div>
       </div>
@@ -52,7 +52,7 @@
       </div>
     </header>
 
-    <!-- 配對大廳與 QR Code (起跑時自動隱藏) -->
+    <!-- 配對大廳與 QR Code -->
     <div id="lobby-panel" class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 mb-2 flex flex-col md:flex-row items-center justify-between gap-5 shadow-2xl transition-all duration-500">
       <div class="flex flex-col items-center md:items-start text-center md:text-left">
         <h2 class="text-base font-bold text-white mb-0.5">拿起手機掃描 QR Code 參賽 (支援 1~6 人)</h2>
@@ -60,9 +60,11 @@
         <div class="text-xs text-slate-400 font-mono">
           房間代碼：<span id="room-code-display" class="text-amber-400 font-bold">---</span>
         </div>
+        <div id="host-status" class="mt-2 text-[10px] font-mono text-cyan-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
+          伺服器狀態：正在連線信令...
+        </div>
       </div>
       <div id="qrcode" class="bg-white p-2 rounded-xl shadow-md inline-block"></div>
-      <!-- 6 人席位格 (3欄 x 2列) -->
       <div class="grid grid-cols-3 gap-2 w-full md:w-[480px]">
         <div id="slot-0" class="p-2 rounded-lg border border-red-500/30 bg-red-950/20 text-center text-xs text-red-400 font-bold">🐶 1P 柴柴</div>
         <div id="slot-1" class="p-2 rounded-lg border border-cyan-500/30 bg-cyan-950/20 text-center text-xs text-cyan-400 font-bold">🐧 2P 企鵝</div>
@@ -89,7 +91,7 @@
       </div>
     </div>
 
-    <!-- 田徑跑道區 (最多 6 條獨立跑道) -->
+    <!-- 田徑跑道區 -->
     <div id="track-container" class="flex-1 bg-gradient-to-b from-orange-900 to-amber-950 rounded-2xl p-3 md:p-5 border-4 border-amber-950 shadow-2xl flex flex-col justify-around gap-2 relative overflow-hidden min-h-[500px]">
       <div id="tracks-wrapper" class="flex flex-col gap-2 relative z-10 w-full h-full justify-around"></div>
     </div>
@@ -97,7 +99,7 @@
     <!-- 結算頒獎排行榜 -->
     <div id="leaderboard-modal" class="hidden fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
       <div class="bg-slate-900 border border-slate-700 p-6 md:p-8 rounded-3xl max-w-lg w-full text-center shadow-2xl">
-        <h2 class="text-3xl font-black text-amber-400 mb-2">🏆 400M 萌寵錦標賽結算</h2>
+        <h2 class="text-3xl font-black text-amber-400 mb-2">🏆 中山校運會 結算</h2>
         <div id="podium-list" class="flex flex-col gap-2 my-5 text-sm font-semibold max-h-[380px] overflow-y-auto"></div>
         <button id="btn-close-modal" class="w-full py-3.5 bg-gradient-to-r from-amber-400 to-orange-500 text-slate-950 font-black rounded-xl active:scale-95 transition shadow-lg">
           回到賽場 ➔
@@ -108,12 +110,11 @@
 
   <!-- ==================== 手機體感手把端 (Controller View) ==================== -->
   <div id="controller-view" class="hidden flex-1 flex-col items-center justify-between p-5 max-w-md mx-auto w-full text-center">
-    <!-- 頂端選手與暱稱自訂區 -->
     <div class="w-full">
       <div id="mobile-player-tag" class="text-sm font-black px-4 py-1.5 rounded-full inline-block bg-slate-900 text-amber-400 mb-2 border border-slate-700 shadow">
         配對玩家中...
       </div>
-      <div id="mobile-conn-status" class="block mx-auto max-w-[200px] px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold mb-3">
+      <div id="mobile-conn-status" class="block mx-auto max-w-[240px] px-3 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 rounded-full text-xs font-bold mb-3">
         正在連線主機...
       </div>
 
@@ -147,17 +148,29 @@
       <div id="send-status" class="text-sm font-mono text-emerald-400 font-bold mt-1">累計送出: 0 次</div>
     </div>
 
-    <!-- 備用按鈕 -->
+    <!-- 備用手動按鈕 -->
     <button id="btn-touch-boost" class="w-full py-4.5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
       🔥 點擊衝刺 (測試送出)
     </button>
   </div>
 
-  <!-- ==================== 前端核心邏輯 ==================== -->
+  <!-- ==================== 前端核心邏輯 (強化自動重連與診斷) ==================== -->
   <script>
     const TOTAL_DISTANCE = 400;
 
-    // 6 位可愛 Q 版動物選手
+    // 全球多節點 STUN 穿透設定
+    const PEER_CONFIG = {
+      debug: 1,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:global.stun.twilio.com:3478' }
+        ]
+      }
+    };
+
     const PLAYER_CONFIG = [
       {
         id: 0,
@@ -357,7 +370,7 @@
     }
 
     // ============================================================
-    // 角色 A：手機手把端 (Controller)
+    // 角色 A：手機手把端 (Controller) - 強化連線防呆與重試
     // ============================================================
     if (roomParam) {
       document.getElementById('controller-view').classList.remove('hidden');
@@ -366,21 +379,28 @@
       let assignedPlayerId = null;
       let totalPacketsSent = 0;
       let conn = null;
+      let connectTimer = null;
+      let retryCount = 0;
 
-      peer = new Peer({
-        debug: 1,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        }
-      });
+      const statusEl = document.getElementById('mobile-conn-status');
+      statusEl.innerText = '正在尋找主機...';
 
-      peer.on('open', () => {
+      peer = new Peer(PEER_CONFIG);
+
+      function establishConnection() {
+        if (!peer || peer.destroyed) return;
+        retryCount++;
+        statusEl.innerText = `正在配對房間 (${retryCount})...`;
+
+        try {
+          if (conn) conn.close();
+        } catch(e) {}
+
         conn = peer.connect(roomParam, { reliable: true });
 
         conn.on('open', () => {
+          clearInterval(connectTimer);
+          statusEl.innerText = '已與大螢幕握手，就位中...';
           conn.send({ type: 'JOIN' });
         });
 
@@ -393,18 +413,38 @@
             tagEl.style.color = pInfo.color;
             tagEl.style.borderColor = pInfo.color;
 
-            // 預設輸入框填入動物名
             document.getElementById('input-nickname').value = pInfo.name.split(' ')[1] || pInfo.name;
 
-            const statusEl = document.getElementById('mobile-conn-status');
             statusEl.innerText = '✅ 就位成功！可輸入名牌';
-            statusEl.className = 'block mx-auto max-w-[200px] px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold mb-3';
+            statusEl.className = 'block mx-auto max-w-[240px] px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold mb-3';
 
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
           } else if (data && data.type === 'ROOM_FULL') {
+            clearInterval(connectTimer);
             alert('該房間已額滿（最多 6 位選手）！');
           }
         });
+
+        conn.on('error', (err) => {
+          statusEl.innerText = '連線微幅延遲，重試中...';
+        });
+      }
+
+      peer.on('open', () => {
+        establishConnection();
+        // 若 3.5 秒內未取得席位，自動重試
+        connectTimer = setInterval(() => {
+          if (assignedPlayerId === null && retryCount < 6) {
+            establishConnection();
+          } else if (retryCount >= 6 && assignedPlayerId === null) {
+            clearInterval(connectTimer);
+            statusEl.innerText = '❌ 配對逾時，請重整網頁';
+          }
+        }, 3500);
+      });
+
+      peer.on('error', (err) => {
+        statusEl.innerText = `連線錯誤: ${err.type || '網路受阻'}`;
       });
 
       // 自訂選手暱稱發送
@@ -495,20 +535,16 @@
       let players = [];
       let totalReceived = 0;
 
-      const roomId = 'sprint' + Math.floor(1000 + Math.random() * 9000);
+      // 產生純英數字房間 ID (降低特殊字元解析失誤)
+      const roomId = 'csic' + Math.floor(1000 + Math.random() * 9000);
       document.getElementById('room-code-display').innerText = roomId;
 
-      peer = new Peer(roomId, {
-        debug: 1,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' }
-          ]
-        }
-      });
+      peer = new Peer(roomId, PEER_CONFIG);
 
       peer.on('open', (id) => {
+        document.getElementById('host-status').innerText = `✅ 信令就緒！房間代號：${id}`;
+        document.getElementById('host-status').className = 'mt-2 text-[10px] font-mono text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-emerald-900';
+
         const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
         new QRCode(document.getElementById('qrcode'), {
           text: joinUrl,
@@ -517,6 +553,11 @@
           colorDark: "#020617",
           colorLight: "#ffffff"
         });
+      });
+
+      peer.on('error', (err) => {
+        document.getElementById('host-status').innerText = `⚠️ 信令異常 (${err.type})，請重整`;
+        document.getElementById('host-status').className = 'mt-2 text-[10px] font-mono text-red-400 bg-slate-950 px-2 py-1 rounded border border-red-900';
       });
 
       peer.on('connection', (conn) => {
@@ -566,11 +607,9 @@
             const rawName = String(data.name).trim().substring(0, 8);
             playerObj.name = `${playerObj.slot + 1}P ${rawName}`;
             
-            // 更新大廳按鈕名牌
             const slotEl = document.getElementById(`slot-${playerObj.slot}`);
             if (slotEl) slotEl.innerText = `✅ ${playerObj.name}`;
 
-            // 更新跑道文字
             const nameEl = document.getElementById(`name-tag-${playerObj.slot}`);
             if (nameEl) nameEl.innerText = playerObj.name;
           }
@@ -614,7 +653,6 @@
                 <div class="border-r-2 border-dashed border-white h-full relative"></div>
               </div>
 
-              <!-- 自訂暱稱標籤 -->
               <div class="absolute left-3 top-1 text-[11px] md:text-xs font-black z-20 flex items-center gap-2 bg-slate-950/70 px-2.5 py-0.5 rounded-full border border-slate-700/60" style="color: ${p.color}">
                 <span id="name-tag-${p.slot}">${p.name}</span>
                 <span class="text-white/60">·</span>
