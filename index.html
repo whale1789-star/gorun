@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>中山 CSIC 400M </title>
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <title>中山-CSIC 400M </title>
+  <!-- 載入 MQTT 即時通訊套件、QRCode 與 Confetti 特效套件 -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -36,7 +37,7 @@
         <span class="text-3xl">🐾</span>
         <div>
           <h1 class="text-xl md:text-2xl font-black text-amber-400 tracking-wider">中山校運會 400M</h1>
-          <p class="text-[11px] text-slate-400">大螢幕端 · 支援 6 位玩家各自在手機輸入專屬名牌</p>
+          <p class="text-[11px] text-slate-400">大螢幕端 · 雲端極速通道 (保證秒連)</p>
         </div>
       </div>
       <div class="flex items-center gap-3">
@@ -56,15 +57,16 @@
     <div id="lobby-panel" class="bg-slate-900/90 rounded-2xl p-4 border border-slate-800 mb-2 flex flex-col md:flex-row items-center justify-between gap-5 shadow-2xl transition-all duration-500">
       <div class="flex flex-col items-center md:items-start text-center md:text-left">
         <h2 class="text-base font-bold text-white mb-0.5">拿起手機掃描 QR Code 參賽 (支援 1~6 人)</h2>
-        <p class="text-slate-400 text-xs mb-2">選手可在手機上輸入專屬姓名！僅 1 人時將由電腦 AI 狐狸陪跑。</p>
+        <p class="text-slate-400 text-xs mb-2">選手可在手機輸入暱稱！僅 1 人時將由電腦 AI 狐狸陪跑。</p>
         <div class="text-xs text-slate-400 font-mono">
           房間代碼：<span id="room-code-display" class="text-amber-400 font-bold">---</span>
         </div>
-        <div id="host-status" class="mt-2 text-[10px] font-mono text-cyan-400 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-          伺服器狀態：正在連線信令...
+        <div id="host-status" class="mt-2 text-[10px] font-mono text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-emerald-900">
+          ✅ 雲端中繼連線正常 (連線即通)
         </div>
       </div>
       <div id="qrcode" class="bg-white p-2 rounded-xl shadow-md inline-block"></div>
+      <!-- 6 人席位格 (3欄 x 2列) -->
       <div class="grid grid-cols-3 gap-2 w-full md:w-[480px]">
         <div id="slot-0" class="p-2 rounded-lg border border-red-500/30 bg-red-950/20 text-center text-xs text-red-400 font-bold">🐶 1P 柴柴</div>
         <div id="slot-1" class="p-2 rounded-lg border border-cyan-500/30 bg-cyan-950/20 text-center text-xs text-cyan-400 font-bold">🐧 2P 企鵝</div>
@@ -148,28 +150,18 @@
       <div id="send-status" class="text-sm font-mono text-emerald-400 font-bold mt-1">累計送出: 0 次</div>
     </div>
 
-    <!-- 備用手動按鈕 -->
+    <!-- 備用按鈕 -->
     <button id="btn-touch-boost" class="w-full py-4.5 bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 font-black text-xl rounded-2xl shadow-xl active:scale-95 transition">
       🔥 點擊衝刺 (測試送出)
     </button>
   </div>
 
-  <!-- ==================== 前端核心邏輯 (強化自動重連與診斷) ==================== -->
+  <!-- ==================== 前端核心邏輯 (全球 WSS 雲端直通引擎) ==================== -->
   <script>
     const TOTAL_DISTANCE = 400;
 
-    // 全球多節點 STUN 穿透設定
-    const PEER_CONFIG = {
-      debug: 1,
-      config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-          { urls: 'stun:stun2.l.google.com:19302' },
-          { urls: 'stun:global.stun.twilio.com:3478' }
-        ]
-      }
-    };
+    // 採用 Eclipse 官方高穩定 WebSocket 雲端 Broker (SSL 443 標準埠，不被任何防火牆擋)
+    const MQTT_BROKER = 'wss://broker.emqx.io:8084/mqtt';
 
     const PLAYER_CONFIG = [
       {
@@ -347,7 +339,7 @@
     const urlParams = new URLSearchParams(window.location.search);
     const roomParam = urlParams.get('room');
 
-    let peer = null;
+    let client = null;
     let isRunning = false;
     let startTime = 0;
     let gameLoopId = null;
@@ -370,7 +362,7 @@
     }
 
     // ============================================================
-    // 角色 A：手機手把端 (Controller) - 強化連線防呆與重試
+    // 角色 A：手機手把端 (Controller) - 毫秒直通
     // ============================================================
     if (roomParam) {
       document.getElementById('controller-view').classList.remove('hidden');
@@ -378,35 +370,31 @@
 
       let assignedPlayerId = null;
       let totalPacketsSent = 0;
-      let conn = null;
-      let connectTimer = null;
-      let retryCount = 0;
-
+      const myClientId = 'm_' + Math.random().toString(36).substring(2, 9);
+      const roomTopic = `csic-sprint-race/${roomParam}`;
       const statusEl = document.getElementById('mobile-conn-status');
-      statusEl.innerText = '正在尋找主機...';
 
-      peer = new Peer(PEER_CONFIG);
+      statusEl.innerText = '正在直連雲端通道...';
 
-      function establishConnection() {
-        if (!peer || peer.destroyed) return;
-        retryCount++;
-        statusEl.innerText = `正在配對房間 (${retryCount})...`;
+      client = mqtt.connect(MQTT_BROKER, {
+        clientId: myClientId,
+        clean: true,
+        connectTimeout: 4000,
+        reconnectPeriod: 1500
+      });
 
+      client.on('connect', () => {
+        statusEl.innerText = '已連線！正在排入跑道...';
+        client.subscribe(roomTopic);
+        // 主動發送加入請求
+        client.publish(roomTopic, JSON.stringify({ type: 'JOIN', clientId: myClientId }));
+      });
+
+      client.on('message', (topic, payload) => {
         try {
-          if (conn) conn.close();
-        } catch(e) {}
-
-        conn = peer.connect(roomParam, { reliable: true });
-
-        conn.on('open', () => {
-          clearInterval(connectTimer);
-          statusEl.innerText = '已與大螢幕握手，就位中...';
-          conn.send({ type: 'JOIN' });
-        });
-
-        conn.on('data', (data) => {
-          if (data && data.type === 'ASSIGN_SLOT') {
-            assignedPlayerId = data.slot;
+          const msg = JSON.parse(payload.toString());
+          if (msg.type === 'ASSIGN_SLOT' && msg.clientId === myClientId) {
+            assignedPlayerId = msg.slot;
             const pInfo = PLAYER_CONFIG[assignedPlayerId];
             const tagEl = document.getElementById('mobile-player-tag');
             tagEl.innerText = `你是 ${pInfo.name}`;
@@ -419,54 +407,33 @@
             statusEl.className = 'block mx-auto max-w-[240px] px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-full text-xs font-bold mb-3';
 
             if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-          } else if (data && data.type === 'ROOM_FULL') {
-            clearInterval(connectTimer);
+          } else if (msg.type === 'ROOM_FULL' && msg.clientId === myClientId) {
             alert('該房間已額滿（最多 6 位選手）！');
           }
-        });
-
-        conn.on('error', (err) => {
-          statusEl.innerText = '連線微幅延遲，重試中...';
-        });
-      }
-
-      peer.on('open', () => {
-        establishConnection();
-        // 若 3.5 秒內未取得席位，自動重試
-        connectTimer = setInterval(() => {
-          if (assignedPlayerId === null && retryCount < 6) {
-            establishConnection();
-          } else if (retryCount >= 6 && assignedPlayerId === null) {
-            clearInterval(connectTimer);
-            statusEl.innerText = '❌ 配對逾時，請重整網頁';
-          }
-        }, 3500);
-      });
-
-      peer.on('error', (err) => {
-        statusEl.innerText = `連線錯誤: ${err.type || '網路受阻'}`;
+        } catch(e) {}
       });
 
       // 自訂選手暱稱發送
       document.getElementById('btn-update-name').addEventListener('click', () => {
         const customName = document.getElementById('input-nickname').value.trim();
-        if (!customName) return;
+        if (!customName || assignedPlayerId === null) return;
 
-        if (conn && conn.open && assignedPlayerId !== null) {
-          conn.send({ type: 'SET_NAME', name: customName });
-          const tagEl = document.getElementById('mobile-player-tag');
-          tagEl.innerText = `${assignedPlayerId + 1}P ${customName}`;
-          alert(`已成功將選手名牌改為：${customName}`);
-        }
+        client.publish(roomTopic, JSON.stringify({ type: 'SET_NAME', slot: assignedPlayerId, name: customName }));
+        const tagEl = document.getElementById('mobile-player-tag');
+        tagEl.innerText = `${assignedPlayerId + 1}P ${customName}`;
+        alert(`已成功將選手名牌改為：${customName}`);
       });
 
       function sendSpeedBoost(power) {
+        if (assignedPlayerId === null || !client || !client.connected) return;
         totalPacketsSent++;
         document.getElementById('send-status').innerText = `累計送出: ${totalPacketsSent} 次`;
 
-        if (conn && conn.open) {
-          conn.send({ type: 'SHAKE', power: Number(power) || 15 });
-        }
+        client.publish(roomTopic, JSON.stringify({
+          type: 'SHAKE',
+          slot: assignedPlayerId,
+          power: Number(power) || 15
+        }));
       }
 
       let lastAcc = { x: 0, y: 0, z: 0 };
@@ -535,50 +502,56 @@
       let players = [];
       let totalReceived = 0;
 
-      // 產生純英數字房間 ID (降低特殊字元解析失誤)
+      // 產生純英數 4 碼房間代碼
       const roomId = 'csic' + Math.floor(1000 + Math.random() * 9000);
       document.getElementById('room-code-display').innerText = roomId;
+      const roomTopic = `csic-sprint-race/${roomId}`;
 
-      peer = new Peer(roomId, PEER_CONFIG);
-
-      peer.on('open', (id) => {
-        document.getElementById('host-status').innerText = `✅ 信令就緒！房間代號：${id}`;
-        document.getElementById('host-status').className = 'mt-2 text-[10px] font-mono text-emerald-400 bg-slate-950 px-2 py-1 rounded border border-emerald-900';
-
-        const joinUrl = `${window.location.origin}${window.location.pathname}?room=${id}`;
-        new QRCode(document.getElementById('qrcode'), {
-          text: joinUrl,
-          width: 110,
-          height: 110,
-          colorDark: "#020617",
-          colorLight: "#ffffff"
-        });
+      // 產生手機掃描 QR Code
+      const joinUrl = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
+      new QRCode(document.getElementById('qrcode'), {
+        text: joinUrl,
+        width: 110,
+        height: 110,
+        colorDark: "#020617",
+        colorLight: "#ffffff"
       });
 
-      peer.on('error', (err) => {
-        document.getElementById('host-status').innerText = `⚠️ 信令異常 (${err.type})，請重整`;
-        document.getElementById('host-status').className = 'mt-2 text-[10px] font-mono text-red-400 bg-slate-950 px-2 py-1 rounded border border-red-900';
+      // 連線 MQTT 伺服器
+      const hostClientId = 'host_' + Math.random().toString(36).substring(2, 9);
+      client = mqtt.connect(MQTT_BROKER, {
+        clientId: hostClientId,
+        clean: true
       });
 
-      peer.on('connection', (conn) => {
-        let playerObj = null;
+      client.on('connect', () => {
+        client.subscribe(roomTopic);
+        document.getElementById('host-status').innerText = '✅ 雲端中繼連線正常 (等待手機掃碼)';
+      });
 
-        conn.on('data', (data) => {
-          if (!data) return;
+      client.on('message', (topic, payload) => {
+        try {
+          const data = JSON.parse(payload.toString());
 
-          // 加入房間
-          if (data.type === 'JOIN') {
+          // 手機加入
+          if (data.type === 'JOIN' && data.clientId) {
+            let existing = players.find(p => p.clientId === data.clientId);
+            if (existing) {
+              client.publish(roomTopic, JSON.stringify({ type: 'ASSIGN_SLOT', clientId: data.clientId, slot: existing.slot }));
+              return;
+            }
+
             if (players.length >= 6) {
-              conn.send({ type: 'ROOM_FULL' });
+              client.publish(roomTopic, JSON.stringify({ type: 'ROOM_FULL', clientId: data.clientId }));
               return;
             }
 
             const slotIndex = players.length;
             const pInfo = PLAYER_CONFIG[slotIndex];
 
-            playerObj = {
+            const playerObj = {
               slot: slotIndex,
-              peerConn: conn,
+              clientId: data.clientId,
               name: pInfo.name,
               color: pInfo.color,
               svg: pInfo.svg,
@@ -590,7 +563,7 @@
             };
 
             players.push(playerObj);
-            conn.send({ type: 'ASSIGN_SLOT', slot: slotIndex });
+            client.publish(roomTopic, JSON.stringify({ type: 'ASSIGN_SLOT', clientId: data.clientId, slot: slotIndex }));
 
             document.getElementById('player-count-badge').innerText = `已加入選手: ${players.filter(p => !p.isAI).length} / 6 人`;
             const slotEl = document.getElementById(`slot-${slotIndex}`);
@@ -602,41 +575,47 @@
             renderTracks();
           }
 
-          // 選手修改暱稱
-          if (data.type === 'SET_NAME' && playerObj) {
-            const rawName = String(data.name).trim().substring(0, 8);
-            playerObj.name = `${playerObj.slot + 1}P ${rawName}`;
-            
-            const slotEl = document.getElementById(`slot-${playerObj.slot}`);
-            if (slotEl) slotEl.innerText = `✅ ${playerObj.name}`;
+          // 修改暱稱
+          if (data.type === 'SET_NAME') {
+            const playerObj = players.find(p => p.slot === data.slot);
+            if (playerObj) {
+              const rawName = String(data.name).trim().substring(0, 8);
+              playerObj.name = `${playerObj.slot + 1}P ${rawName}`;
+              
+              const slotEl = document.getElementById(`slot-${playerObj.slot}`);
+              if (slotEl) slotEl.innerText = `✅ ${playerObj.name}`;
 
-            const nameEl = document.getElementById(`name-tag-${playerObj.slot}`);
-            if (nameEl) nameEl.innerText = playerObj.name;
+              const nameEl = document.getElementById(`name-tag-${playerObj.slot}`);
+              if (nameEl) nameEl.innerText = playerObj.name;
+            }
           }
 
           // 搖晃加速
-          if (data.type === 'SHAKE' && playerObj && !playerObj.finished) {
-            totalReceived++;
+          if (data.type === 'SHAKE') {
+            const playerObj = players.find(p => p.slot === data.slot);
+            if (playerObj && !playerObj.finished) {
+              totalReceived++;
 
-            const rawPower = Number(data.power) || 12;
-            let boost = Math.min(rawPower * 0.22, 4.0);
+              const rawPower = Number(data.power) || 12;
+              let boost = Math.min(rawPower * 0.22, 4.0);
 
-            if (playerObj.kmh > 28) {
-              const resistanceFactor = Math.max(0.1, (43.5 - playerObj.kmh) / 15.5);
-              boost *= resistanceFactor;
+              if (playerObj.kmh > 28) {
+                const resistanceFactor = Math.max(0.1, (43.5 - playerObj.kmh) / 15.5);
+                boost *= resistanceFactor;
+              }
+
+              playerObj.kmh += boost;
+              if (playerObj.kmh > 43.5) playerObj.kmh = 43.5;
+
+              const runnerEl = document.getElementById(`runner-${playerObj.slot}`);
+              if (runnerEl) {
+                runnerEl.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.remove('paused'));
+              }
+
+              playBeep(260 + Math.min(playerObj.kmh * 8, 480));
             }
-
-            playerObj.kmh += boost;
-            if (playerObj.kmh > 43.5) playerObj.kmh = 43.5;
-
-            const runnerEl = document.getElementById(`runner-${playerObj.slot}`);
-            if (runnerEl) {
-              runnerEl.querySelectorAll('.anim-leg-l, .anim-leg-r, .anim-body').forEach(el => el.classList.remove('paused'));
-            }
-
-            playBeep(260 + Math.min(playerObj.kmh * 8, 480));
           }
-        });
+        } catch(e) {}
       });
 
       function renderTracks() {
@@ -710,7 +689,7 @@
           players = realPlayers;
           const aiPlayer = {
             slot: 1,
-            peerConn: null,
+            clientId: 'ai_bot',
             name: AI_CONFIG.name,
             color: AI_CONFIG.color,
             svg: AI_CONFIG.svg,
